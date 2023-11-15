@@ -1,11 +1,16 @@
+from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from openfoodfacts.utils import get_logger
+from peewee import DoesNotExist
+from playhouse.shortcuts import model_to_dict
+from pydantic import BaseModel
 
 from app.config import settings
+from app.models import Flags, db
 from app.utils import init_sentry
 
 logger = get_logger(level=settings.log_level.to_int())
@@ -38,3 +43,98 @@ def main_page(request: Request):
 @app.get("/robots.txt", response_class=PlainTextResponse)
 def robots_txt():
     return """User-agent: *\nDisallow: /"""
+
+
+# CRUD Flags
+
+
+class FlagCreate(BaseModel):
+    barcode: str
+    type: str
+    url: str
+    user_id: str
+    device_id: str
+    source: str
+    confidence: float
+    image_id: str
+    flavour: str
+    reason: str
+    comment: str
+    created_at: datetime
+
+
+class FlagResponse(BaseModel):
+    id: int
+    barcode: str
+    type: str
+    url: str
+    user_id: str
+    device_id: str
+    source: str
+    confidence: float
+    image_id: str
+    flavour: str
+    reason: str
+    comment: str
+    created_at: datetime
+
+
+# Create a flag
+@app.post("/flags")
+async def create_flag(flag: FlagCreate):
+    with db:
+        try:
+            new_flag = await Flags.create(**flag.dict())
+            return model_to_dict(new_flag)
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# Get all flags
+@app.get("/flags")
+def get_flags():
+    with db:
+        try:
+            flags = Flags.select()
+            return [model_to_dict(flag) for flag in flags]
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# Get flag by ID
+@app.get("/flags/{flag_id}")
+def get_flag(flag_id: int):
+    with db:
+        try:
+            flag = Flags.get_by_id(flag_id)
+            return model_to_dict(flag)
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Flag not found")
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# Update a flag
+@app.put("/flags/{flag_id}")
+async def update_flag(item_id: int):
+    with db:
+        try:
+            return {"message": "Updated"}
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Flag not found")
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# Delete a flag
+@app.delete("/flags/{flag_id}")
+async def delete_flag(flag_id: int):
+    with db:
+        try:
+            flag = Flags.get_by_id(flag_id)
+            flag.delete_instance()
+            return {"message": f"Flag with ID {flag_id} has been deleted"}
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Flag not found")
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
