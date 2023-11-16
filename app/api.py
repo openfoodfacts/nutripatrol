@@ -128,21 +128,6 @@ def get_flag(flag_id: int):
             raise HTTPException(status_code=500, detail=f"{error}")
 
 
-# Update a flag
-@app.patch("/flags/{flag_id}")
-async def update_flag(flag_id: int, updated_data: FlagsUpdate):
-    with db:
-        try:
-            flag = Flags.get_by_id(flag_id)
-            Flags.update(**updated_data.dict())
-            flag.save()
-            return {"message": f"Flag with id {flag_id} updated successfully"}
-        except DoesNotExist:
-            raise HTTPException(status_code=404, detail="Flag not found")
-        except Exception as error:
-            raise HTTPException(status_code=500, detail=f"{error}")
-
-
 # Delete a flag
 @app.delete("/flags/{flag_id}")
 async def delete_flag(flag_id: int):
