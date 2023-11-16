@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from openfoodfacts.utils import get_logger
 from peewee import DoesNotExist
 from playhouse.shortcuts import model_to_dict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.models import Flags, db
@@ -60,7 +60,7 @@ class FlagCreate(BaseModel):
     flavour: str
     reason: str
     comment: str
-    created_at: datetime
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class FlagResponse(BaseModel):
@@ -79,12 +79,26 @@ class FlagResponse(BaseModel):
     created_at: datetime
 
 
+class FlagsUpdate(BaseModel):
+    barcode: str
+    type: str
+    url: str
+    user_id: str
+    device_id: str
+    source: str
+    confidence: float
+    image_id: str
+    flavour: str
+    reason: str
+    comment: str
+
+
 # Create a flag
 @app.post("/flags")
-async def create_flag(flag: FlagCreate):
+def create_flag(flag: FlagCreate):
     with db:
         try:
-            new_flag = await Flags.create(**flag.dict())
+            new_flag = Flags.create(**flag.dict())
             return model_to_dict(new_flag)
         except Exception as error:
             raise HTTPException(status_code=500, detail=f"{error}")
@@ -115,11 +129,14 @@ def get_flag(flag_id: int):
 
 
 # Update a flag
-@app.put("/flags/{flag_id}")
-async def update_flag(item_id: int):
+@app.patch("/flags/{flag_id}")
+async def update_flag(flag_id: int, updated_data: FlagsUpdate):
     with db:
         try:
-            return {"message": "Updated"}
+            flag = Flags.get_by_id(flag_id)
+            Flags.update(**updated_data.dict())
+            flag.save()
+            return {"message": f"Flag with id {flag_id} updated successfully"}
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Flag not found")
         except Exception as error:
