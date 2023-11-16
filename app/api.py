@@ -10,7 +10,7 @@ from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.models import Flags, db
+from app.models import Flags, Tickets, db
 from app.utils import init_sentry
 
 logger = get_logger(level=settings.log_level.to_int())
@@ -63,36 +63,6 @@ class FlagCreate(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class FlagResponse(BaseModel):
-    id: int
-    barcode: str
-    type: str
-    url: str
-    user_id: str
-    device_id: str
-    source: str
-    confidence: float
-    image_id: str
-    flavour: str
-    reason: str
-    comment: str
-    created_at: datetime
-
-
-class FlagsUpdate(BaseModel):
-    barcode: str
-    type: str
-    url: str
-    user_id: str
-    device_id: str
-    source: str
-    confidence: float
-    image_id: str
-    flavour: str
-    reason: str
-    comment: str
-
-
 # Create a flag
 @app.post("/flags")
 def create_flag(flag: FlagCreate):
@@ -136,6 +106,68 @@ async def delete_flag(flag_id: int):
             flag = Flags.get_by_id(flag_id)
             flag.delete_instance()
             return {"message": f"Flag with ID {flag_id} has been deleted"}
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Flag not found")
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# CRUD Tickets
+
+
+class TicketCreate(BaseModel):
+    barcode: str
+    type: str
+    url: str
+    status: str
+    image_id: str
+    flavour: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# Create a ticket
+@app.post("/tickets")
+def create_ticket(ticket: TicketCreate):
+    with db:
+        try:
+            new_ticket = Tickets.create(**ticket.dict())
+            return model_to_dict(new_ticket)
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# Get all tickets
+@app.get("/tickets")
+def get_tickets():
+    with db:
+        try:
+            tickets = Tickets.select()
+            return [model_to_dict(ticket) for ticket in tickets]
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# Get ticket by id
+@app.get("/tickets/{ticket_id}")
+def get_ticket(ticket_id: int):
+    with db:
+        try:
+            ticket = Tickets.get_by_id(ticket_id)
+            return model_to_dict(ticket)
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Flag not found")
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# Delete ticket by id
+@app.delete("/tickets/{ticket_id}")
+def delete_ticket(ticket_id: int):
+    with db:
+        try:
+            flag = Tickets.get_by_id(ticket_id)
+            flag.delete_instance()
+            return {"message": f"Flag with ID {ticket_id} has been deleted"}
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Flag not found")
         except Exception as error:
