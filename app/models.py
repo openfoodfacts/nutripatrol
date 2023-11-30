@@ -14,7 +14,7 @@ db = PostgresqlDatabase(
 
 
 # Définissez vos modèles de table
-class Tickets(Model):
+class TicketModel(Model):
     id = IntegerField(primary_key=True)
     barcode = CharField()
     type = CharField()
@@ -26,23 +26,25 @@ class Tickets(Model):
 
     class Meta:
         database = db
+        table_name = "tickets"
 
 
-class ModeratorActions(Model):
+class ModeratorActionModel(Model):
     id = IntegerField(primary_key=True)
     action_type = CharField()
     moderator_id = IntegerField()
     user_id = IntegerField()
-    ticket_id = ForeignKeyField(Tickets, backref="moderator_actions")
+    ticket_id = ForeignKeyField(TicketModel, backref="moderator_actions")
     created_at = DateTimeField()
 
     class Meta:
         database = db
+        table_name = "moderator_actions"
 
 
-class Flags(Model):
+class FlagModel(Model):
     id = IntegerField(primary_key=True)
-    ticket_id = ForeignKeyField(Tickets, backref="flags")
+    ticket = ForeignKeyField(TicketModel, backref="flags")
     barcode = CharField()
     type = CharField()
     url = CharField()
@@ -58,3 +60,4 @@ class Flags(Model):
 
     class Meta:
         database = db
+        table_name = "flags"

@@ -4,13 +4,14 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
+from openfoodfacts import Flavor
 from openfoodfacts.utils import get_logger
 from peewee import DoesNotExist
 from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.models import Flags, Tickets, db
+from app.models import FlagModel, TicketModel, db
 from app.utils import init_sentry
 
 logger = get_logger(level=settings.log_level.to_int())
@@ -48,62 +49,103 @@ def robots_txt():
 # CRUD Flags
 
 
-class FlagCreate(BaseModel):
-    barcode: str
-    type: str
-    url: str
-    user_id: str
-    device_id: str
-    source: str
-    confidence: float
-    image_id: str
-    flavour: str
-    reason: str
-    comment: str
+class TicketCreate(BaseModel):
+    barcode: str = Field(..., description="Barcode of the product")
+    type: str = Field(..., description="Type of the issue")
+    url: str = Field(..., description="URL of the product")
+    status: str = Field(..., description="Status of the ticket")
+    image_id: str = Field(..., description="Image ID of the product")
+    flavour: Flavor = Field(..., description="Flavour of the product")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-# Create a flag
+class Ticket(TicketCreate):
+    id: int = Field(..., description="ID of the ticket")
+
+
+class FlagCreate(BaseModel):
+    barcode: str = Field(..., description="Barcode of the product")
+    type: str = Field(..., description="Type of the issue")
+    url: str = Field(..., description="URL of the product")
+    user_id: str = Field(..., description="User ID of the flagger")
+    device_id: str = Field(..., description="Device ID of the flagger")
+    source: str = Field(..., description="Source of the flag")
+    confidence: float = Field(..., description="Confidence of the flag")
+    image_id: str = Field(..., description="Image ID of the product")
+    flavour: Flavor = Field(..., description="Flavour of the product")
+    reason: str = Field(..., description="Reason of the flag")
+    comment: str = Field(..., description="Comment of the flag")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Flag(FlagCreate):
+    id: int = Field(..., description="ID of the flag")
+    ticket_id: int = Field(..., description="ID of the ticket associated with the flag")
+
+
+# Create a flag (one to one relationship)
 @app.post("/flags")
-def create_flag(flag: FlagCreate):
+def create_flag(flag: FlagCreate) -> Flag:
     with db:
         try:
-            new_flag = Flags.create(**flag.dict())
-            return model_to_dict(new_flag)
+            # Search for existing ticket
+            # With the same barcode, url, type and flavour
+            ticket = TicketModel.get_or_none(
+                TicketModel.barcode == flag.barcode,
+                TicketModel.url == flag.url,
+                TicketModel.type == flag.type,
+                TicketModel.flavour == flag.flavour,
+            )
+            # If no ticket found, create a new one
+            if ticket is None:
+                newTicket = TicketCreate(
+                    barcode=flag.barcode,
+                    url=flag.url,
+                    type=flag.type,
+                    flavour=flag.flavour,
+                    status="open",
+                    image_id=flag.image_id,
+                )
+                ticket = _create_ticket(newTicket)
+            new_flag = FlagModel.create(**flag.model_dump())
+            # Associate the flag with the ticket
+            new_flag.ticket_id = ticket.id
+            new_flag.save()
+            return new_flag
         except Exception as error:
             raise HTTPException(status_code=500, detail=f"{error}")
 
 
-# Get all flags
+# Get all flags (one to many relationship)
 @app.get("/flags")
 def get_flags():
     with db:
         try:
-            flags = Flags.select()
+            flags = FlagModel.select()
             return [model_to_dict(flag) for flag in flags]
         except Exception as error:
             raise HTTPException(status_code=500, detail=f"{error}")
 
 
-# Get flag by ID
+# Get flag by ID (one to one relationship)
 @app.get("/flags/{flag_id}")
 def get_flag(flag_id: int):
     with db:
         try:
-            flag = Flags.get_by_id(flag_id)
-            return model_to_dict(flag)
+            flag = FlagModel.get_by_id(flag_id)
+            return flag
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Flag not found")
         except Exception as error:
             raise HTTPException(status_code=500, detail=f"{error}")
 
 
-# Delete a flag
+# Delete a flag by ID (hard delete)
 @app.delete("/flags/{flag_id}")
-async def delete_flag(flag_id: int):
+def delete_flag(flag_id: int):
     with db:
         try:
-            flag = Flags.get_by_id(flag_id)
+            flag = FlagModel.get_by_id(flag_id)
             flag.delete_instance()
             return {"message": f"Flag with ID {flag_id} has been deleted"}
         except DoesNotExist:
@@ -115,60 +157,81 @@ async def delete_flag(flag_id: int):
 # CRUD Tickets
 
 
-class TicketCreate(BaseModel):
-    barcode: str
-    type: str
-    url: str
-    status: str
-    image_id: str
-    flavour: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+def _create_ticket(ticket: TicketCreate):
+    return TicketModel.create(**ticket.model_dump())
 
 
-# Create a ticket
+# Create a ticket (one to one relationship)
 @app.post("/tickets")
-def create_ticket(ticket: TicketCreate):
+def create_ticket(ticket: TicketCreate) -> Ticket:
     with db:
-        try:
-            new_ticket = Tickets.create(**ticket.dict())
-            return model_to_dict(new_ticket)
-        except Exception as error:
-            raise HTTPException(status_code=500, detail=f"{error}")
+        return _create_ticket(ticket)
 
 
-# Get all tickets
+# Get all tickets (one to many relationship)
 @app.get("/tickets")
 def get_tickets():
     with db:
         try:
-            tickets = Tickets.select()
+            tickets = TicketModel.select()
             return [model_to_dict(ticket) for ticket in tickets]
         except Exception as error:
             raise HTTPException(status_code=500, detail=f"{error}")
 
 
-# Get ticket by id
+# Get ticket by id (one to one relationship)
 @app.get("/tickets/{ticket_id}")
 def get_ticket(ticket_id: int):
     with db:
         try:
-            ticket = Tickets.get_by_id(ticket_id)
-            return model_to_dict(ticket)
+            ticket = TicketModel.get_by_id(ticket_id)
+            return ticket
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Flag not found")
         except Exception as error:
             raise HTTPException(status_code=500, detail=f"{error}")
 
 
-# Delete ticket by id
+# Delete ticket by id (hard delete)
 @app.delete("/tickets/{ticket_id}")
 def delete_ticket(ticket_id: int):
     with db:
         try:
-            flag = Tickets.get_by_id(ticket_id)
+            flag = TicketModel.get_by_id(ticket_id)
             flag.delete_instance()
             return {"message": f"Flag with ID {ticket_id} has been deleted"}
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Flag not found")
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# Get all flags for a ticket by id (one to many relationship)
+@app.get("/tickets/{ticket_id}/flags")
+def get_flags_by_ticket(ticket_id: int):
+    with db:
+        try:
+            flags = FlagModel.select().where(FlagModel.ticket_id == ticket_id)
+            return [model_to_dict(flag) for flag in flags]
+        except Exception as error:
+            raise HTTPException(status_code=500, detail=f"{error}")
+
+
+# Update ticket status by id with enum : open, closed (soft delete)
+@app.put("/tickets/{ticket_id}/status")
+def update_ticket_status(ticket_id: int, status: str):
+    if status not in ["open", "closed"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Status must be one of the following : open, closed",
+        )
+    with db:
+        try:
+            ticket = TicketModel.get_by_id(ticket_id)
+            ticket.status = status
+            ticket.save()
+            return {"message": f"Ticket with ID {ticket_id} has been updated"}
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Ticket not found")
         except Exception as error:
             raise HTTPException(status_code=500, detail=f"{error}")
