@@ -17,12 +17,12 @@ db = PostgresqlDatabase(
 class TicketModel(Model):
     id = IntegerField(primary_key=True)
     barcode = CharField()
-    type = CharField()
+    type = CharField(null=False)
     url = CharField()
-    status = CharField()
+    status = CharField(null=False)
     image_id = CharField()
-    flavour = CharField()
-    created_at = DateTimeField()
+    flavour = CharField(null=False)
+    created_at = DateTimeField(null=False)
 
     class Meta:
         database = db
@@ -34,8 +34,8 @@ class ModeratorActionModel(Model):
     action_type = CharField()
     moderator_id = IntegerField()
     user_id = IntegerField()
-    ticket_id = ForeignKeyField(TicketModel, backref="moderator_actions")
-    created_at = DateTimeField()
+    ticket = ForeignKeyField(TicketModel, backref="moderator_actions")
+    created_at = DateTimeField(null=False)
 
     class Meta:
         database = db
@@ -46,17 +46,17 @@ class FlagModel(Model):
     id = IntegerField(primary_key=True)
     ticket = ForeignKeyField(TicketModel, backref="flags")
     barcode = CharField()
-    type = CharField()
+    type = CharField(null=False)
     url = CharField()
     user_id = CharField()
     device_id = CharField()
     source = CharField()
     confidence = FloatField()
     image_id = CharField()
-    flavour = CharField()
+    flavour = CharField(null=False)
     reason = CharField()
     comment = CharField(max_length=500)
-    created_at = DateTimeField()
+    created_at = DateTimeField(null=False)
 
     class Meta:
         database = db
