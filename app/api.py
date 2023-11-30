@@ -46,9 +46,6 @@ def robots_txt():
     return """User-agent: *\nDisallow: /"""
 
 
-# CRUD Flags
-
-
 class TicketCreate(BaseModel):
     barcode: str = Field(..., description="Barcode of the product")
     type: str = Field(..., description="Type of the issue")
@@ -140,23 +137,6 @@ def get_flag(flag_id: int):
             raise HTTPException(status_code=500, detail=f"{error}")
 
 
-# Delete a flag by ID (hard delete)
-@app.delete("/flags/{flag_id}")
-def delete_flag(flag_id: int):
-    with db:
-        try:
-            flag = FlagModel.get_by_id(flag_id)
-            flag.delete_instance()
-            return {"message": f"Flag with ID {flag_id} has been deleted"}
-        except DoesNotExist:
-            raise HTTPException(status_code=404, detail="Flag not found")
-        except Exception as error:
-            raise HTTPException(status_code=500, detail=f"{error}")
-
-
-# CRUD Tickets
-
-
 def _create_ticket(ticket: TicketCreate):
     return TicketModel.create(**ticket.model_dump())
 
@@ -186,20 +166,6 @@ def get_ticket(ticket_id: int):
         try:
             ticket = TicketModel.get_by_id(ticket_id)
             return ticket
-        except DoesNotExist:
-            raise HTTPException(status_code=404, detail="Flag not found")
-        except Exception as error:
-            raise HTTPException(status_code=500, detail=f"{error}")
-
-
-# Delete ticket by id (hard delete)
-@app.delete("/tickets/{ticket_id}")
-def delete_ticket(ticket_id: int):
-    with db:
-        try:
-            flag = TicketModel.get_by_id(ticket_id)
-            flag.delete_instance()
-            return {"message": f"Flag with ID {ticket_id} has been deleted"}
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Flag not found")
         except Exception as error:
