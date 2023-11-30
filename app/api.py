@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -184,13 +185,13 @@ def get_flags_by_ticket(ticket_id: int):
 
 
 # Update ticket status by id with enum : open, closed (soft delete)
+class TicketStatus(str, Enum):
+    open = "open"
+    closed = "closed"
+
+
 @app.put("/tickets/{ticket_id}/status")
-def update_ticket_status(ticket_id: int, status: str):
-    if status not in ["open", "closed"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Status must be one of the following : open, closed",
-        )
+def update_ticket_status(ticket_id: int, status: TicketStatus):
     with db:
         try:
             ticket = TicketModel.get_by_id(ticket_id)
