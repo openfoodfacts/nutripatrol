@@ -50,8 +50,6 @@ def robots_txt():
 async def catch_exceptions(request: Request, call_next):
     try:
         return await call_next(request)
-    except DoesNotExist:
-        raise HTTPException(status_code=404, detail="Not found")
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -141,8 +139,11 @@ def get_flags():
 @app.get("/flags/{flag_id}")
 def get_flag(flag_id: int):
     with db:
-        flag = FlagModel.get_by_id(flag_id)
-        return flag
+        try:
+            flag = FlagModel.get_by_id(flag_id)
+            return flag
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Not found")
 
 
 def _create_ticket(ticket: TicketCreate):
@@ -168,23 +169,32 @@ def get_tickets():
 @app.get("/tickets/{ticket_id}")
 def get_ticket(ticket_id: int):
     with db:
-        ticket = TicketModel.get_by_id(ticket_id)
-        return ticket
+        try:
+            ticket = TicketModel.get_by_id(ticket_id)
+            return ticket
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Not found")
 
 
 # Get all flags for a ticket by id (one to many relationship)
 @app.get("/tickets/{ticket_id}/flags")
 def get_flags_by_ticket(ticket_id: int):
     with db:
-        flags = FlagModel.select().where(FlagModel.ticket_id == ticket_id)
-        return [model_to_dict(flag) for flag in flags]
+        try:
+            flags = FlagModel.select().where(FlagModel.ticket_id == ticket_id)
+            return [model_to_dict(flag) for flag in flags]
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Not found")
 
 
 # Update ticket status by id with enum : open, closed (soft delete)
 @app.put("/tickets/{ticket_id}/status")
 def update_ticket_status(ticket_id: int, status: TicketStatus):
     with db:
-        ticket = TicketModel.get_by_id(ticket_id)
-        ticket.status = status
-        ticket.save()
-        return {"message": f"Ticket with ID {ticket_id} has been updated"}
+        try:
+            ticket = TicketModel.get_by_id(ticket_id)
+            ticket.status = status
+            ticket.save()
+            return {"message": f"Ticket with ID {ticket_id} has been updated"}
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Not found")
