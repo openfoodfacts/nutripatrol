@@ -71,7 +71,7 @@ class TicketStatus(str, Enum):
 class TicketCreate(BaseModel):
     barcode: str = Field(..., description="Barcode of the product")
     type: str = Field(..., description="Type of the issue")
-    url: str = Field(..., description="URL of the product, only for search issues")
+    url: str = Field(..., description="URL of the product or image flagged")
     status: TicketStatus = Field(..., description="Status of the ticket")
     image_id: str = Field(..., description="ID of the flagged image")
     flavour: Flavor = Field(..., description="Flavour of the product")
@@ -85,7 +85,7 @@ class Ticket(TicketCreate):
 class FlagCreate(BaseModel):
     barcode: str = Field(..., description="Barcode of the product")
     type: str = Field(..., description="Type of the issue")
-    url: str = Field(..., description="URL of the product, only for search issues")
+    url: str = Field(..., description="URL of the product or image flagged")
     user_id: str = Field(..., description="User ID of the flagger")
     source: str = Field(..., description="Source of the flag")
     confidence: float = Field(
