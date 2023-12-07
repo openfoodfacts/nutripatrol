@@ -50,6 +50,7 @@ def robots_txt():
 
 
 def _get_device_id(request: Request):
+    """Get the device ID from the request, or generate one if not provided."""
     device_id = request.query_params.get("device_id")
     if device_id is None:
         device_id = hashlib.sha1(str(request.client.host).encode()).hexdigest()

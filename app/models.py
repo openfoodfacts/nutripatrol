@@ -34,7 +34,6 @@ class TicketModel(Model):
 
 class ModeratorActionModel(Model):
     action_type = CharField()
-    moderator_id = CharField()
     user_id = CharField()
     ticket = ForeignKeyField(TicketModel, backref="moderator_actions")
     created_at = DateTimeField()
