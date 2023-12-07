@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 from enum import Enum, auto
 from pathlib import Path
@@ -55,6 +56,13 @@ async def catch_exceptions(request: Request, call_next):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+def _get_device_id(request: Request):
+    device_id = request.query_params.get("device_id")
+    if device_id is None:
+        device_id = hashlib.sha1(str(request.client.host).encode()).hexdigest()
+    return device_id
+
+
 class TicketStatus(str, Enum):
     open = auto()
     closed = auto()
@@ -79,7 +87,6 @@ class FlagCreate(BaseModel):
     type: str = Field(..., description="Type of the issue")
     url: str = Field(..., description="URL of the product, only for search issues")
     user_id: str = Field(..., description="User ID of the flagger")
-    device_id: str = Field(..., description="Device ID of the flagger")
     source: str = Field(..., description="Source of the flag")
     confidence: float = Field(
         ...,
@@ -95,11 +102,12 @@ class FlagCreate(BaseModel):
 class Flag(FlagCreate):
     id: int = Field(..., description="ID of the flag")
     ticket_id: int = Field(..., description="ID of the ticket associated with the flag")
+    device_id: str = Field(..., description="Device ID of the flagger")
 
 
 # Create a flag (one to one relationship)
 @app.post("/flags")
-def create_flag(flag: FlagCreate) -> Flag:
+def create_flag(flag: FlagCreate, request: Request) -> Flag:
     with db:
         # Search for existing ticket
         # With the same barcode, url, type and flavour
@@ -120,7 +128,11 @@ def create_flag(flag: FlagCreate) -> Flag:
                 image_id=flag.image_id,
             )
             ticket = _create_ticket(newTicket)
+        device_id = _get_device_id(request)
+        logger.info(f"Device ID: {device_id}")
         new_flag = FlagModel.create(**flag.model_dump())
+        # Associate the flag with the device
+        new_flag.device_id = device_id
         # Associate the flag with the ticket
         new_flag.ticket_id = ticket.id
         new_flag.save()
