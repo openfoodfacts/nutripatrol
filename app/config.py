@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+from openfoodfacts import Environment
 from pydantic_settings import BaseSettings
 
 
@@ -29,6 +30,12 @@ class LoggingLevel(StrEnum):
 class Settings(BaseSettings):
     sentry_dns: str | None = None
     log_level: LoggingLevel = LoggingLevel.INFO
+    postgres_host: str = "localhost"
+    postgres_db: str = "postgres"
+    postgres_user: str = "postgres"
+    postgres_password: str = "postgres"
+    postgres_port: int = 5432
+    off_tld: Environment = Environment.net
 
 
 settings = Settings()

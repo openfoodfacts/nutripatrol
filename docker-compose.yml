@@ -6,6 +6,11 @@ x-api-common: &api-common
   environment:
     - SENTRY_DNS
     - LOG_LEVEL
+    - POSTGRES_USER
+    - POSTGRES_PASSWORD
+    - POSTGRES_DB
+    - POSTGRES_HOST
+    - OFF_TLD
   networks:
     - default
 
@@ -15,5 +20,20 @@ services:
     ports:
       - "${API_PORT}:8000"
 
+  postgres:
+    restart: $RESTART_POLICY
+    image: postgres:16.0-alpine
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    command: postgres -c shared_buffers=1024MB -c work_mem=64MB
+    mem_limit: 4g
+    shm_size: 1g
+    ports:
+      - "${POSTGRES_EXPOSE:-127.0.0.1:5432}:5432"
+
 volumes:
-  rediscache:
+  postgres-data:
