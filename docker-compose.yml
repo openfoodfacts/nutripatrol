@@ -6,6 +6,11 @@ x-api-common: &api-common
   environment:
     - SENTRY_DNS
     - LOG_LEVEL
+    - POSTGRES_USER
+    - POSTGRES_PASSWORD
+    - POSTGRES_DB
+    - POSTGRES_HOST
+    - OFF_TLD
   networks:
     - default
 

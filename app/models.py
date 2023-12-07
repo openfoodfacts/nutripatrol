@@ -3,25 +3,29 @@ from peewee import (
     DateTimeField,
     FloatField,
     ForeignKeyField,
-    IntegerField,
     Model,
     PostgresqlDatabase,
 )
 
+from .config import settings
+
 db = PostgresqlDatabase(
-    "postgres", user="postgres", password="postgres", host="postgres", port=5432
+    settings.postgres_db,
+    user=settings.postgres_user,
+    password=settings.postgres_password,
+    host=settings.postgres_host,
+    port=settings.postgres_port,
 )
 
 
 class TicketModel(Model):
-    id = IntegerField(primary_key=True)
-    barcode = CharField()
-    type = CharField(null=False)
+    barcode = CharField(null=True)
+    type = CharField()
     url = CharField()
-    status = CharField(null=False)
-    image_id = CharField()
-    flavour = CharField(null=False)
-    created_at = DateTimeField(null=False)
+    status = CharField()
+    image_id = CharField(null=True)
+    flavor = CharField()
+    created_at = DateTimeField()
 
     class Meta:
         database = db
@@ -29,12 +33,11 @@ class TicketModel(Model):
 
 
 class ModeratorActionModel(Model):
-    id = IntegerField(primary_key=True)
     action_type = CharField()
-    moderator_id = IntegerField()
-    user_id = IntegerField()
+    moderator_id = CharField()
+    user_id = CharField()
     ticket = ForeignKeyField(TicketModel, backref="moderator_actions")
-    created_at = DateTimeField(null=False)
+    created_at = DateTimeField()
 
     class Meta:
         database = db
@@ -42,20 +45,19 @@ class ModeratorActionModel(Model):
 
 
 class FlagModel(Model):
-    id = IntegerField(primary_key=True)
     ticket = ForeignKeyField(TicketModel, backref="flags")
-    barcode = CharField()
-    type = CharField(null=False)
+    barcode = CharField(null=True)
+    type = CharField()
     url = CharField()
     user_id = CharField()
     device_id = CharField()
     source = CharField()
-    confidence = FloatField()
-    image_id = CharField()
-    flavour = CharField(null=False)
-    reason = CharField()
-    comment = CharField(max_length=500)
-    created_at = DateTimeField(null=False)
+    confidence = FloatField(null=True)
+    image_id = CharField(null=True)
+    flavor = CharField()
+    reason = CharField(null=True)
+    comment = CharField(max_length=500, null=True)
+    created_at = DateTimeField()
 
     class Meta:
         database = db
