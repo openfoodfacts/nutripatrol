@@ -13,7 +13,6 @@ db = PostgresqlDatabase(
 )
 
 
-# Définissez vos modèles de table
 class TicketModel(Model):
     id = IntegerField(primary_key=True)
     barcode = CharField()

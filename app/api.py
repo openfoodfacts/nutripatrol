@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import Enum, auto
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -58,16 +58,16 @@ async def catch_exceptions(request: Request, call_next):
 
 
 class TicketStatus(str, Enum):
-    open = "open"
-    closed = "closed"
+    open = auto()
+    closed = auto()
 
 
 class TicketCreate(BaseModel):
     barcode: str = Field(..., description="Barcode of the product")
     type: str = Field(..., description="Type of the issue")
-    url: str = Field(..., description="URL of the product")
+    url: str = Field(..., description="URL of the product, only for search issues")
     status: TicketStatus = Field(..., description="Status of the ticket")
-    image_id: str = Field(..., description="Image ID of the product")
+    image_id: str = Field(..., description="ID of the flagged image")
     flavour: Flavor = Field(..., description="Flavour of the product")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -79,7 +79,7 @@ class Ticket(TicketCreate):
 class FlagCreate(BaseModel):
     barcode: str = Field(..., description="Barcode of the product")
     type: str = Field(..., description="Type of the issue")
-    url: str = Field(..., description="URL of the product")
+    url: str = Field(..., description="URL of the product, only for search issues")
     user_id: str = Field(..., description="User ID of the flagger")
     device_id: str = Field(..., description="Device ID of the flagger")
     source: str = Field(..., description="Source of the flag")
@@ -87,7 +87,7 @@ class FlagCreate(BaseModel):
         ...,
         description="Confidence of the flag, it's a machine learning confidence score. It's a float between 0 and 1 and it's optional.",
     )
-    image_id: str = Field(..., description="Image ID of the product")
+    image_id: str = Field(..., description="Image ID of the flagged image")
     flavour: Flavor = Field(..., description="Flavour of the product")
     reason: str = Field(..., description="Reason of the flag")
     comment: str = Field(..., description="Comment of the flag")
