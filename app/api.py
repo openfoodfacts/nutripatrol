@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from openfoodfacts import Flavor
 from openfoodfacts.images import generate_image_url
 from openfoodfacts.utils import URLBuilder, get_logger
@@ -35,6 +36,19 @@ app = FastAPI(
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 init_sentry(settings.sentry_dns)
 
+# Allow all origins in development. You might want to restrict this in production.
+origins = [
+    "http://localhost",
+    "http://localhost:5173",  # Add the origin of your frontend application
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/", response_class=HTMLResponse)
 def main_page(request: Request):
@@ -59,6 +73,7 @@ def _get_device_id(request: Request):
 
 class TicketStatus(StrEnum):
     open = auto()
+    archived = auto()
     closed = auto()
 
 

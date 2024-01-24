@@ -1,0 +1,29 @@
+/* reset css */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  text-decoration: none;
+  list-style: none;
+}
+
+body {
+  font-family: 'Roboto', sans-serif;
+  background-color: #fff8f0;
+}
+
+a {
+  color: inherit;
+}
+
+.main-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.ticket-container {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
