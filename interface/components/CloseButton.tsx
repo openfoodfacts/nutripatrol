@@ -12,10 +12,11 @@ export default function CloseButton(props: { id: number }) {
 
     return (
         <Button
+            variant="outlined"
             color="error"
             onClick={() => handleClose(props.id)}
         >
-            Close
+            No problem
         </Button>
     )
 }

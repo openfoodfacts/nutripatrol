@@ -11,10 +11,11 @@ export default function CloseButton(props: { id: number }) {
 
     return (
         <Button
+            variant="outlined"
             color="success"
             onClick={() => handleArchive(props.id)}
         >
-            Archive
+            I fix it !
         </Button>
     )
 }

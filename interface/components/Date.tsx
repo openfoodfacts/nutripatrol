@@ -1,6 +1,6 @@
 function dateParser(date: string) {
-    // Take only ten first caracters of the date
-    let newDate = date.slice(0, 10).split('-').reverse().join('/')
+    // Take only the date and hour and minutes
+    let newDate = date.slice(0, 16).split('T').join(' / ')
     return newDate
 }
 
