@@ -15,7 +15,7 @@ export default function CloseButton(props: { id: number }) {
             color="success"
             onClick={() => handleArchive(props.id)}
         >
-            I fix it !
+            I fixed it !
         </Button>
     )
 }
