@@ -1,5 +1,5 @@
 import Button from '@mui/material/Button';
-import { Link } from 'react-router-dom'; // You may need to adjust this import based on your routing library
+import { Link } from 'react-router-dom';
 
 export default function BarcodeButton(props: { barcode: string }) {
     const linkUrl = `https://world.openfoodfacts.org/cgi/product.pl?type=edit&code=${props.barcode}`;

@@ -1,4 +1,3 @@
-import LayoutMenu from '../components/Layouts/LayoutMenu'
 import { Stack } from '@mui/material'
 import Item from '../components/Ticket'
 import { useEffect, useState } from 'react'
@@ -24,16 +23,14 @@ export default function ModerationPage() {
 
     return (
         <>
-            <LayoutMenu>
-                <Stack spacing={2}>
-                    {
-                    // Map through the tickets and create a ticket component for each ticket with status
-                    Tickets.map((ticket) => (
-                        ticket.status === "open" && <Item key={ticket.barcode} ticket={ticket} />
-                    ))
-                    }
-                </Stack>
-            </LayoutMenu>
+            <Stack spacing={2}>
+                {
+                // Map through the tickets and create a ticket component for each ticket with status
+                Tickets.map((ticket) => (
+                    ticket.status === "open" && <Item key={ticket.barcode} ticket={ticket} />
+                ))
+                }
+            </Stack>
         </>
     )
 }

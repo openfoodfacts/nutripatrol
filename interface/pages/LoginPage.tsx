@@ -1,14 +1,19 @@
+import Button from '@mui/material/Button';
+import { Link } from 'react-router-dom';
+
 export default function LoginPage() {
     return (
-        <div className='login-container'>
-            <h1>Login</h1>
-            <form>
-                <label htmlFor="username">Username</label>
-                <input type="text" id="username" name="username" />
-                <label htmlFor="password">Password</label>
-                <input type="password" id="password" name="password" />
-                <input type="submit" value="Submit" />
-            </form>
+        <div style={{margin: '5rem 0', color: '#281900', display: 'flex',flexDirection: "column", alignItems: "center", justifyContent:"center"}}>
+            <h2 style={{fontSize: '1.4rem', margin: "2rem 0"}}>🇫🇷 Connectez-vous avec votre compte OpenFoodFacts </h2>
+            <h2 style={{fontSize: '1.4rem', margin: "2rem 0"}}>🇺🇸 / 🇬🇧 Login with your OpenFoodFacts account </h2>
+            <Button 
+                component={Link} 
+                to={"https://world.openfoodfacts.org/cgi/session.pl"} 
+                variant='contained'
+                color="primary"
+                target="_blank" >
+                Login
+            </Button>
         </div>
     )
 }
