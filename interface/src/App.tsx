@@ -10,7 +10,8 @@ import HomePage from '../pages/HomePage.tsx'
 import ModerationPage from '../pages/ModerationPage.tsx'
 import LoginPage from '../pages/LoginPage.tsx'
 import LayoutMenu from "../components/Layouts/LayoutMenu.tsx";
-import LoginContext from "./context/login.tsx";
+import LoginContext from "./contexts/login.tsx";
+import NotFound from "../pages/NotFound.tsx";
 
 export default function App() {
 
@@ -73,7 +74,7 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/moderation" element={userState.isLoggedIn ? < ModerationPage/> : <LoginPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="*" element={<h1>Not Found</h1>} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </LayoutMenu>
       </LoginContext.Provider>
