@@ -58,16 +58,12 @@ export default function App() {
         lastSeenCookie.current = sessionCookie;
         return false;
       });
-      console.log(isLoggedIn);
       
     return isLoggedIn;
   }, [userState.isLoggedIn]);
 
   useEffect(() => {
-    refresh();
-    console.log(userState);
-    
-    
+    refresh(); 
   }, [refresh]);
 
   return (
