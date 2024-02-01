@@ -27,9 +27,11 @@ export default function App() {
   const refresh = useCallback(async () => {
     // Get the session cookie
     const sessionCookie = off.getCookie("session");
+    // If the session cookie is the same as the last seen cookie, return the current login state
     if (sessionCookie === lastSeenCookie.current) {
       return userState.isLoggedIn;
     }
+    // If the session cookie is null, the user is not logged in
     if (!sessionCookie) {
       setUserState({
         userName: "",
@@ -38,10 +40,12 @@ export default function App() {
       lastSeenCookie.current = sessionCookie;
       return false;
     }
+    // If the session cookie is not null, send a request to the server to check if the user is logged in
     const isLoggedIn = axios
       .get("https://world.openfoodfacts.org/cgi/session.pl", {
         withCredentials: true,
       })
+      // If the request is successful, set the user state to logged in
       .then(() => {
         const cookieUserName = off.getUsername();
         setUserState({
@@ -51,6 +55,7 @@ export default function App() {
         lastSeenCookie.current = sessionCookie;
         return true;
       })
+      // If the request is not successful, set the user state to logged out
       .catch(() => {
         setUserState({
           userName: "",
