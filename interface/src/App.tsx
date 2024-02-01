@@ -15,16 +15,30 @@ import NotFound from "../pages/NotFound.tsx";
 
 export default function App() {
 
+  const devMode = false;
   const [userState, setUserState] = useState(() => {
+    if (devMode) {
+      return {
+        userName: "",
+        isLoggedIn: true,
+      };
+    }
     return {
       userName: "",
       isLoggedIn: false,
     };
   });
+  
 
   const lastSeenCookie = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (devMode) {
+      setUserState({
+        userName: "",
+        isLoggedIn: true,
+      });
+    }
     // Get the session cookie
     const sessionCookie = off.getCookie("session");
     // If the session cookie is the same as the last seen cookie, return the current login state
@@ -74,14 +88,14 @@ export default function App() {
 
   return (
       <LoginContext.Provider value={{ ...userState, refresh }}>
-        <LayoutMenu>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/moderation" element={userState.isLoggedIn ? < ModerationPage/> : <LoginPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </LayoutMenu>
+          <LayoutMenu>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/moderation" element={userState.isLoggedIn ? < ModerationPage/> : <LoginPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </LayoutMenu>
       </LoginContext.Provider>
     )
 }
