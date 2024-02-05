@@ -59,7 +59,7 @@ export default function App() {
     }
     // If the session cookie is not null, send a request to the server to check if the user is logged in
     const isLoggedIn = axios
-      .get("https://world.openfoodfacts.org/cgi/session.pl", {
+      .get(`${import.meta.env.VITE_PO_URL}/cgi/session.pl`, {
         withCredentials: true,
       })
       // If the request is successful, set the user state to logged in

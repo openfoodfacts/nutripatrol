@@ -8,7 +8,7 @@ export default function LoginPage() {
             <h2 style={{fontSize: '1.4rem', margin: "2rem 0"}}>🇺🇸 / 🇬🇧 Login with your OpenFoodFacts account </h2>
             <Button 
                 component={Link} 
-                to={"https://world.openfoodfacts.org/cgi/session.pl"} 
+                to={`${import.meta.env.VITE_PO_URL}/cgi/session.pl`} 
                 variant='contained'
                 color="primary"
                 target="_blank" >
