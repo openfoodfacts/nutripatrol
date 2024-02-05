@@ -2,7 +2,7 @@ import Button from '@mui/material/Button';
 import { Link } from 'react-router-dom';
 
 export default function BarcodeButton(props: { barcode: string }) {
-    const linkUrl = `https://world.openfoodfacts.org/cgi/product.pl?type=edit&code=${props.barcode}`;
+    const linkUrl = `${import.meta.env.VITE_PO_URL}/cgi/product.pl?type=edit&code=${props.barcode}`;
 
     return (
         <Button 

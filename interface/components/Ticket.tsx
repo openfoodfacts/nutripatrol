@@ -21,8 +21,8 @@ export default function Ticket({ticket}: any) {
                 
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center'}}>
                     <img 
-                        //src={ticket.url} 
-                        src='https://images.openfoodfacts.net/images/products/327/408/000/5003/1.400.jpg'
+                        src={ticket.url} 
+                        // src='https://images.openfoodfacts.net/images/products/327/408/000/5003/1.400.jpg'
                         alt={ticket.barcode}
                         width={100}
                         height={100}
