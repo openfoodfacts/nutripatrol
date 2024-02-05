@@ -3,7 +3,7 @@ import Button from '@mui/material/Button';
 
 // Change status of ticket to archived
 function handleArchive(id: number) {
-    axios.put(`http://localhost:8000/tickets/${id}/status?status=archived`)
+    axios.put(`${import.meta.env.VITE_API_URL}/tickets/${id}/status?status=archived`)
     window.location.reload();
 }
 

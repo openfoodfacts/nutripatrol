@@ -16,7 +16,8 @@ import NotFound from "../pages/NotFound.tsx";
 export default function App() {
 
   // turn in to true to test the moderation page - it will always be logged in
-  const devMode = false;
+  const devMode = (import.meta.env.VITE_DEVELOPPEMENT_MODE === "development");
+  
 
   const [userState, setUserState] = useState(() => {
     if (devMode) {

@@ -4,7 +4,7 @@ import Button from '@mui/material/Button';
 
 // Change status of ticket to closed
 function handleClose(id: number) {
-    axios.put(`http://localhost:8000/tickets/${id}/status?status=closed`)
+    axios.put(`${import.meta.env.VITE_API_URL}/tickets/${id}/status?status=closed`)
     window.location.reload();
 }
 

@@ -15,7 +15,7 @@ export default function ModerationPage() {
 
     useEffect(() => {
         // send get request to api to get tickets and set Tickets to the response
-        axios.get('http://localhost:8000/tickets').then((res) => {
+        axios.get(`${import.meta.env.VITE_API_URL}/tickets`).then((res) => {
             setTickets(res.data.tickets)
         })
     }, [])
