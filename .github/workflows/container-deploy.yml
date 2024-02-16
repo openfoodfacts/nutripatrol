@@ -38,10 +38,11 @@ jobs:
       run: |
         echo "SSH_HOST=10.1.0.200" >> $GITHUB_ENV
         echo "ENVIRONMENT=staging" >> $GITHUB_ENV
-        if: matrix.env == 'nutripatrol-org'
-        run: |
-          echo "SSH_HOST=10.1.0.201" >> $GITHUB_ENV
-          echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+    - name: Set various variable for staging (org) deployment
+      if: matrix.env == 'nutripatrol-org'
+      run: |
+        echo "SSH_HOST=10.1.0.201" >> $GITHUB_ENV
+        echo "ENVIRONMENT=prod" >> $GITHUB_ENV
     - name: Wait for docker image container build workflow
       uses: tomchv/wait-my-workflow@v1.1.0
       id: wait-build
