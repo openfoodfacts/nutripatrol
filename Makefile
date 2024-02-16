@@ -58,6 +58,11 @@ down:
 	${DOCKER_COMPOSE} down
 
 
+# Create all external volumes needed for production. Using external volumes is useful to prevent data loss (as they are not deleted when performing docker down -v)
+create_external_volumes:
+	@echo "🥫 Creating external volumes (production only) …"
+	docker volume create nutripatrol-postgres-data
+
 #-----------#
 # Utilities #
 #-----------#
