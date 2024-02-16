@@ -10,7 +10,6 @@ x-api-common: &api-common
     - POSTGRES_PASSWORD
     - POSTGRES_DB
     - POSTGRES_HOST
-    - OFF_TLD
   networks:
     - default
 
@@ -18,7 +17,7 @@ services:
   api:
     <<: *api-common
     ports:
-      - "${API_PORT}:8000"
+      - "${API_EXPOSE:-127.0.0.1:8000}:8000"
 
   postgres:
     restart: $RESTART_POLICY

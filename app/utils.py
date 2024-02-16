@@ -4,6 +4,8 @@ import sentry_sdk
 from sentry_sdk.integrations import Integration
 from sentry_sdk.integrations.logging import LoggingIntegration
 
+from app.config import settings
+
 
 def init_sentry(sentry_dsn: str | None, integrations: list[Integration] | None = None):
     if sentry_dsn:
@@ -17,4 +19,5 @@ def init_sentry(sentry_dsn: str | None, integrations: list[Integration] | None =
         sentry_sdk.init(  # type:ignore  # mypy say it's abstract
             sentry_dsn,
             integrations=integrations,
+            environment=settings.environment,
         )
