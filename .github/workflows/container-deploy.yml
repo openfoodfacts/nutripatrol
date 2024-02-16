@@ -118,6 +118,9 @@ jobs:
           echo "ENVIRONMENT=${{ env.ENVIRONMENT }}" >> .env
           # Expose API on port 9010
           echo "API_EXPOSE=0.0.0.0:9010" >> .env
+          echo "POSTGRES_HOST=postgres" >> .env
+          # Expose PostgreSQL locally on port 5434
+          echo "POSTGRES_EXPOSE=127.0.0.1:5434" >> .env
 
     - name: Create Docker volumes
       uses: appleboy/ssh-action@master
