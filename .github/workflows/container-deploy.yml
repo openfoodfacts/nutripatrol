@@ -5,9 +5,8 @@ on:
     branches:
       - main
       - deploy-*
-# only staging for now, not prod
-#     tags:
-#       - v*.*.*
+    tags:
+      - v*.*.*
 
 
 # Note on secrets used for connection
@@ -23,9 +22,7 @@ jobs:
     strategy:
       matrix:
         env:
-          # only stagging for now
-          # Note: env is also the name of the directory on the server
-          - nutripatrol-net
+          - ${{ startsWith(github.ref, 'refs/tags/v') && 'robotoff-org' || 'robotoff-net' }}
     environment: ${{ matrix.env }}
     concurrency: ${{ matrix.env }}
     steps:
@@ -193,4 +190,4 @@ jobs:
         apiHost: https://grafana.openfoodfacts.org
         apiToken: ${{ secrets.GRAFANA_API_TOKEN }}
         text: <a href="https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}">Deployment ${{ steps.livecheck.outcome }} on ${{ matrix.env }}</a>
-        tags: type:deployment,origin:github,status:${{ steps.livecheck.outcome }},repo:${{ github.repository }},sha:${{ github.sha }},app:robotoff,env:${{ matrix.env }}
+        tags: type:deployment,origin:github,status:${{ steps.livecheck.outcome }},repo:${{ github.repository }},sha:${{ github.sha }},app:nutripatrol,env:${{ matrix.env }}
