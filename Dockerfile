@@ -15,6 +15,7 @@ RUN groupadd -g $USER_GID off && \
     chown off:off -R /opt/nutripatrol /home/off
 WORKDIR /opt/nutripatrol
 COPY --chown=off:off requirements.txt requirements.txt
+COPY --chown=off:off migrations /opt/nutripatrol/migrations
 RUN  pip install --no-cache-dir --upgrade -r requirements.txt
 
 USER off:off
