@@ -36,7 +36,8 @@ app = FastAPI(
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 init_sentry(settings.sentry_dns)
 
-# Allow all origins in development. You might want to restrict this in production.
+# Allow all origins in development. 
+# You might want to restrict this in production.
 origins = [
     "http://localhost",
     "http://localhost:5173",  # Add the origin of your frontend application
