@@ -1,7 +1,10 @@
 from enum import StrEnum
+from pathlib import Path
 
 from openfoodfacts import Environment
 from pydantic_settings import BaseSettings
+
+PROJECT_DIR = Path(__file__).parent.parent
 
 
 class LoggingLevel(StrEnum):
@@ -36,6 +39,8 @@ class Settings(BaseSettings):
     postgres_password: str = "postgres"
     postgres_port: int = 5432
     off_tld: Environment = Environment.net
+    environment: str = "dev"
+    migration_dir: Path = PROJECT_DIR / "migrations"
 
 
 settings = Settings()

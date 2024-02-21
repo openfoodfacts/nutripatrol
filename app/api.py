@@ -99,7 +99,9 @@ class TicketCreate(BaseModel):
     )
     type: IssueType = Field(..., description="Type of the issue")
     url: str = Field(..., description="URL of the product or of the flagged image")
-    status: TicketStatus = Field(TicketStatus.open, description="Status of the ticket")
+    status: TicketStatus = Field(
+        default=TicketStatus.open, description="Status of the ticket"
+    )
     image_id: str | None = Field(
         None,
         description="ID of the flagged image, if the ticket type is `image`",

@@ -41,6 +41,10 @@ build:
 	docker-compose build
 
 
+# pull images from image repository
+pull:
+	${DOCKER_COMPOSE} pull
+
 up:
 ifdef service
 	${DOCKER_COMPOSE} up -d ${service} 2>&1
@@ -52,3 +56,45 @@ endif
 down:
 	@echo "🥫 Bringing down containers …"
 	${DOCKER_COMPOSE} down
+
+
+# Create all external volumes needed for production. Using external volumes is useful to prevent data loss (as they are not deleted when performing docker down -v)
+create_external_volumes:
+	@echo "🥫 Creating external volumes (production only) …"
+	docker volume create nutripatrol-postgres-data
+
+#-----------#
+# Utilities #
+#-----------#
+
+guard-%: # guard clause for targets that require an environment variable (usually used as an argument)
+	@ if [ "${${*}}" = "" ]; then \
+   		echo "Environment variable '$*' is mandatory"; \
+   		echo use "make ${MAKECMDGOALS} $*=you-args"; \
+   		exit 1; \
+	fi;
+
+
+#------------#
+#  Database  #
+#------------#
+
+# apply DB migrations
+migrate-db:
+	${DOCKER_COMPOSE} run --rm --no-deps api python -m app migrate-db
+
+# add a new DB revision
+add-revision: guard-name
+	${DOCKER_COMPOSE} run --rm --no-deps api python -m app add-revision ${name}
+
+
+#---------#
+# Cleanup #
+#---------#
+prune:
+	@echo "🥫 Pruning unused Docker artifacts (save space) …"
+	docker system prune -af
+
+prune_cache:
+	@echo "🥫 Pruning Docker builder cache …"
+	docker builder prune -f
