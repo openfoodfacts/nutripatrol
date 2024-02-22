@@ -1,3 +1,6 @@
-version: "3.7"
+version: "3.9"
 
-# modifications to docker-compose for production settings
+volumes:
+  postgres-data:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-nutripatrol}-postgres-data

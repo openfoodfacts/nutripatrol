@@ -5,7 +5,9 @@ from peewee import (
     ForeignKeyField,
     Model,
     PostgresqlDatabase,
+    TextField,
 )
+from peewee_migrate import Router
 
 from .config import settings
 
@@ -19,12 +21,13 @@ db = PostgresqlDatabase(
 
 
 class TicketModel(Model):
-    barcode = CharField(null=True)
-    type = CharField()
-    url = CharField()
-    status = CharField()
+    # barcode of the product, if any
+    barcode = TextField(null=True)
+    type = CharField(max_length=50)
+    url = TextField()
+    status = CharField(max_length=50)
     image_id = CharField(null=True)
-    flavor = CharField()
+    flavor = CharField(max_length=20)
     created_at = DateTimeField()
 
     class Meta:
@@ -33,8 +36,8 @@ class TicketModel(Model):
 
 
 class ModeratorActionModel(Model):
-    action_type = CharField()
-    user_id = CharField()
+    action_type = CharField(max_length=20)
+    user_id = TextField()
     ticket = ForeignKeyField(TicketModel, backref="moderator_actions")
     created_at = DateTimeField()
 
@@ -45,19 +48,33 @@ class ModeratorActionModel(Model):
 
 class FlagModel(Model):
     ticket = ForeignKeyField(TicketModel, backref="flags")
-    barcode = CharField(null=True)
-    type = CharField()
-    url = CharField()
-    user_id = CharField()
-    device_id = CharField()
+    barcode = TextField(null=True)
+    type = CharField(max_length=50)
+    url = TextField()
+    user_id = TextField()
+    device_id = TextField()
     source = CharField()
     confidence = FloatField(null=True)
     image_id = CharField(null=True)
-    flavor = CharField()
-    reason = CharField(null=True)
-    comment = CharField(max_length=500, null=True)
+    flavor = CharField(max_length=20)
+    reason = TextField(null=True)
+    comment = TextField(null=True)
     created_at = DateTimeField()
 
     class Meta:
         database = db
         table_name = "flags"
+
+
+def run_migration():
+    """Run all unapplied migrations."""
+    # embedding schema does not exist at DB initialization
+    router = Router(db, migrate_dir=settings.migration_dir)
+    # Run all unapplied migrations
+    router.run()
+
+
+def add_revision(name: str):
+    """Create a migration revision."""
+    router = Router(db, migrate_dir=settings.migration_dir)
+    router.create(name, auto=True)

@@ -10,6 +10,8 @@ x-api-base: &api-base
   volumes:
     # mount code dynamically
     - "./app:/opt/nutripatrol/app"
+    # mount migrations dynamically
+    - "./migrations:/opt/nutripatrol/migrations"
 
 services:
   api:
