@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/openfoodfacts/nutripatrol/compare/v1.0.0...v1.0.1) (2024-02-22)
+
+
+### Technical
+
+* fix production deployment settings ([a0e2827](https://github.com/openfoodfacts/nutripatrol/commit/a0e2827b3b9c99f00e6b4db3926c1e65fb355edb))
+
 ## 1.0.0 (2024-02-16)
 
 
