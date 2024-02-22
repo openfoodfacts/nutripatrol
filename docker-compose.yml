@@ -36,3 +36,4 @@ services:
 
 volumes:
   postgres-data:
+    name: ${COMPOSE_PROJECT_NAME:-nutripatrol}-postgres-data
