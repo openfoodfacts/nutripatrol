@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/openfoodfacts/nutripatrol/compare/v1.0.1...v1.0.2) (2024-02-22)
+
+
+### Bug Fixes
+
+* add /api/v1 prefix to all API routes ([#34](https://github.com/openfoodfacts/nutripatrol/issues/34)) ([fff9add](https://github.com/openfoodfacts/nutripatrol/commit/fff9add510836d8833e6a11b5d063d2c892ebd83))
+
 ## [1.0.1](https://github.com/openfoodfacts/nutripatrol/compare/v1.0.0...v1.0.1) (2024-02-22)
 
 
