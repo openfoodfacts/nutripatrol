@@ -214,6 +214,12 @@ class Flag(FlagCreate):
 # Create a flag (one to one relationship)
 @api_v1_router.post("/flags")
 def create_flag(flag: FlagCreate, request: Request):
+    """Create a flag for a product.
+
+    This function is used to create a flag for a product or an image.
+
+    :return: the created flag
+    """
     with db:
         # Check if the flag already exists
         if (
@@ -264,6 +270,12 @@ def create_flag(flag: FlagCreate, request: Request):
 # Get all flags (one to many relationship)
 @api_v1_router.get("/flags")
 def get_flags():
+    """Get all flags.
+
+    This function is used to get all flags.
+
+    :return: a list of flags
+    """
     with db:
         return {"flags": list(FlagModel.select().dicts().iterator())}
 
@@ -271,6 +283,13 @@ def get_flags():
 # Get flag by ID (one to one relationship)
 @api_v1_router.get("/flags/{flag_id}")
 def get_flag(flag_id: int):
+    """Get a flag by ID.
+
+    This function is used to get a flag by its ID.
+
+    :param flag_id: the ID of the flag
+    :return: the flag
+    """
     with db:
         try:
             return FlagModel.get_by_id(flag_id)
@@ -285,6 +304,12 @@ def _create_ticket(ticket: TicketCreate):
 # Create a ticket (one to one relationship)
 @api_v1_router.post("/tickets")
 def create_ticket(ticket: TicketCreate) -> Ticket:
+    """Create a ticket.
+
+    This function is used to create a ticket for a product or an image.
+
+    :return: the created ticket
+    """
     with db:
         return _create_ticket(ticket)
 
@@ -292,6 +317,12 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 # Get all tickets (one to many relationship)
 @api_v1_router.get("/tickets")
 def get_tickets():
+    """Get all tickets.
+
+    This function is used to get all tickets.
+
+    :return: a list of tickets
+    """
     with db:
         return {"tickets": list(TicketModel.select().dicts().iterator())}
 
@@ -299,6 +330,13 @@ def get_tickets():
 # Get ticket by id (one to one relationship)
 @api_v1_router.get("/tickets/{ticket_id}")
 def get_ticket(ticket_id: int):
+    """Get a ticket by ID.
+
+    This function is used to get a ticket by its ID.
+
+    :param ticket_id: the ID of the ticket
+    :return: the ticket
+    """
     with db:
         try:
             return model_to_dict(TicketModel.get_by_id(ticket_id))
@@ -309,6 +347,13 @@ def get_ticket(ticket_id: int):
 # Get all flags for a ticket by id (one to many relationship)
 @api_v1_router.get("/tickets/{ticket_id}/flags")
 def get_flags_by_ticket(ticket_id: int):
+    """Get all flags for a ticket by ID.
+
+    This function is used to get all flags for a ticket by its ID.
+
+    :param ticket_id: the ID of the ticket
+    :return: a list of flags
+    """
     with db:
         return {
             "flags": list(
@@ -323,6 +368,14 @@ def get_flags_by_ticket(ticket_id: int):
 # Update ticket status by id with enum : open, closed (soft delete)
 @api_v1_router.put("/tickets/{ticket_id}/status")
 def update_ticket_status(ticket_id: int, status: TicketStatus):
+    """Update the status of a ticket by ID.
+
+    This function is used to update the status of a ticket by its ID.
+
+    :param ticket_id: the ID of the ticket
+    :param status: the new status of the ticket
+    :return: the updated ticket
+    """
     with db:
         try:
             ticket = TicketModel.get_by_id(ticket_id)

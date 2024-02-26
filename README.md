@@ -15,3 +15,38 @@ This repo uses [pre-commit](https://pre-commit.com/) to enforce code styling, et
 ```console
 pre-commit run
 ```
+
+### Get started
+1. Clone this repository :
+```console
+git clone https://github.com/openfoodfacts/nutripatrol.git
+```
+
+2. Open it
+```console
+cd nutripatrol
+```
+
+3. Make docker containers
+```console
+docker-compose up -d
+```
+
+4. Install virtual environment python
+```console
+python3 -m venv venv
+```
+
+5. Activate it 
+```console
+# MacOS or Linux
+source venv/bin/activate
+
+# Windows
+venv/Scripts/activate
+```
+
+6. Install requirement.txt dependencies
+```console
+pip3 install -r requirements.txt
+```
