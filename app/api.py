@@ -211,7 +211,6 @@ class Flag(FlagCreate):
     device_id: str = Field(..., description="Device ID of the flagger")
 
 
-# Create a flag (one to one relationship)
 @api_v1_router.post("/flags")
 def create_flag(flag: FlagCreate, request: Request):
     """Create a flag for a product.
@@ -267,7 +266,6 @@ def create_flag(flag: FlagCreate, request: Request):
         )
 
 
-# Get all flags (one to many relationship)
 @api_v1_router.get("/flags")
 def get_flags():
     """Get all flags.
@@ -280,7 +278,6 @@ def get_flags():
         return {"flags": list(FlagModel.select().dicts().iterator())}
 
 
-# Get flag by ID (one to one relationship)
 @api_v1_router.get("/flags/{flag_id}")
 def get_flag(flag_id: int):
     """Get a flag by ID.
@@ -301,7 +298,6 @@ def _create_ticket(ticket: TicketCreate):
     return TicketModel.create(**ticket.model_dump())
 
 
-# Create a ticket (one to one relationship)
 @api_v1_router.post("/tickets")
 def create_ticket(ticket: TicketCreate) -> Ticket:
     """Create a ticket.
@@ -314,7 +310,6 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
         return _create_ticket(ticket)
 
 
-# Get all tickets (one to many relationship)
 @api_v1_router.get("/tickets")
 def get_tickets():
     """Get all tickets.
@@ -327,7 +322,6 @@ def get_tickets():
         return {"tickets": list(TicketModel.select().dicts().iterator())}
 
 
-# Get ticket by id (one to one relationship)
 @api_v1_router.get("/tickets/{ticket_id}")
 def get_ticket(ticket_id: int):
     """Get a ticket by ID.
@@ -344,7 +338,6 @@ def get_ticket(ticket_id: int):
             raise HTTPException(status_code=404, detail="Not found")
 
 
-# Get all flags for a ticket by id (one to many relationship)
 @api_v1_router.get("/tickets/{ticket_id}/flags")
 def get_flags_by_ticket(ticket_id: int):
     """Get all flags for a ticket by ID.
@@ -365,7 +358,6 @@ def get_flags_by_ticket(ticket_id: int):
         }
 
 
-# Update ticket status by id with enum : open, closed (soft delete)
 @api_v1_router.put("/tickets/{ticket_id}/status")
 def update_ticket_status(ticket_id: int, status: TicketStatus):
     """Update the status of a ticket by ID.
