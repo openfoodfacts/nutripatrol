@@ -216,8 +216,9 @@ def create_flag(flag: FlagCreate, request: Request):
     """Create a flag for a product.
 
     This function is used to create a flag for a product or an image.
+    At th same time, it creates a ticket if it does not exist for this product or image.
 
-    :return: the created flag
+    :return: the created flag with the assigned ticket
     """
     with db:
         # Check if the flag already exists
