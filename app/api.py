@@ -220,9 +220,6 @@ def create_flag(flag: FlagCreate, request: Request):
     A flag is associated with a ticket.
     A ticket is created if it does not exist for this product or image.
     A ticket can be associated with multiple flags.
-
-
-    :return: the created flag with the assigned ticket
     """
     with db:
         # Check if the flag already exists
@@ -276,8 +273,6 @@ def get_flags():
     """Get all flags.
 
     This function is used to get all flags.
-
-    :return: a list of flags
     """
     with db:
         return {"flags": list(FlagModel.select().dicts().iterator())}
@@ -288,8 +283,6 @@ def get_flag(flag_id: int):
     """Get a flag by ID.
 
     This function is used to get a flag by its ID.
-
-    :return: the flag
     """
     with db:
         try:
@@ -308,8 +301,6 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 
     This function is used to create a ticket for a product or an image.
     A ticket is a request for a product or an image to be reviewed.
-
-    :return: the created ticket
     """
     with db:
         return _create_ticket(ticket)
@@ -320,8 +311,6 @@ def get_tickets():
     """Get all tickets.
 
     This function is used to get all tickets.
-
-    :return: a list of tickets
     """
     with db:
         return {"tickets": list(TicketModel.select().dicts().iterator())}
@@ -332,8 +321,6 @@ def get_ticket(ticket_id: int):
     """Get a ticket by ID.
 
     This function is used to get a ticket by its ID.
-
-    :return: the ticket
     """
     with db:
         try:
@@ -347,8 +334,6 @@ def get_flags_by_ticket(ticket_id: int):
     """Get all flags for a ticket by ID.
 
     This function is used to get all flags for a ticket by its ID.
-
-    :return: a list of flags
     """
     with db:
         return {
@@ -366,8 +351,6 @@ def update_ticket_status(ticket_id: int, status: TicketStatus):
     """Update the status of a ticket by ID.
 
     This function is used to update the status of a ticket by its ID.
-
-    :return: the updated ticket
     """
     with db:
         try:
