@@ -32,6 +32,8 @@ app = FastAPI(
         "name": " AGPL-3.0",
         "url": "https://www.gnu.org/licenses/agpl-3.0.en.html",
     },
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
 )
 origins = [
     "http://localhost:5173",
