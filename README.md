@@ -34,7 +34,7 @@ make up
 
 4. Install virtual environment python
 ```console
-python3 -m venv venv
+python3 -m venv .venv
 ```
 
 5. Activate it 
