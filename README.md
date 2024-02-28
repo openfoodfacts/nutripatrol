@@ -29,7 +29,7 @@ cd nutripatrol
 
 3. Make docker containers
 ```console
-docker-compose up -d
+make up
 ```
 
 4. Install virtual environment python
