@@ -44,7 +44,7 @@ services:
       # Mount the static files
       - ./static:/var/static
     ports:
-      - ${API_EXPOSE}:80
+      - ${API_EXPOSE:-127.0.0.1:8000}:80
 
 volumes:
   postgres-data:
