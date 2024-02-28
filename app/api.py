@@ -20,8 +20,45 @@ from app.utils import init_sentry
 
 logger = get_logger(level=settings.log_level.to_int())
 
+description = """
+The nutripatrol API is used to report and manage issues with products and images on [Open Food Facts](https://fr.openfoodfacts.org/) website.
+We call a report a "**flag**" and a report will be associated with a "**ticket**" if it does not exist for this product or image. Else it will be associated with the existing ticket.
+
+## Flags
+
+A flag contained the following fields:
+- `barcode`: Barcode of the product, if the flag is about a product or a product image. In case of a search issue, this field is null.
+- `type`: Type of the issue. It can be `product`, `image` or `search`.
+- `url`: URL of the product or of the flagged image.
+- `user_id`: Open Food Facts User ID of the flagger.
+- `source`: Source of the flag. It can be a user from the mobile app, the web or a flag generated automatically by robotoff.
+- `confidence`: Confidence score of the model that generated the flag, this field should only be provided by Robotoff.
+- `image_id`: ID of the flagged image, if the ticket type is `image`.
+- `flavor`: Flavor (project) associated with the ticket.
+- `reason`: Reason for flagging provided by the user. The field is optional.
+- `comment`: Comment provided by the user during flagging. This is a free text field.
+- `created_at`: Creation datetime of the flag.
+- `device_id`: Device ID of the flagger.
+- `ticket_id`: ID of the ticket associated with the flag.
+
+## Tickets
+Automatically created when a flag is created and no ticket exists for the product or image.
+
+A ticket contained the following fields:
+- `barcode`: Barcode of the product, if the ticket is about a product or a product image. In case of a search issue, this field is null.
+- `type`: Type of the issue. It can be `product`, `image` or `search`.
+- `url`: URL of the product or of the flagged image.
+- `status`: Status of the ticket. It can be `open` or `closed`.
+- `image_id`: ID of the flagged image, if the ticket type is `image`.
+- `flavor`: Flavor (project) associated with the ticket.
+- `created_at`: Creation datetime of the ticket.
+
+
+"""
+
 app = FastAPI(
     title="nutripatrol",
+    description=description,
     contact={
         "name": "The Open Food Facts team",
         "url": "https://world.openfoodfacts.org",
