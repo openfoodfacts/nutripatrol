@@ -21,13 +21,14 @@ from app.utils import init_sentry
 logger = get_logger(level=settings.log_level.to_int())
 
 description = """
-The nutripatrol API is used to report and manage issues with products and images on [Open Food Facts](https://fr.openfoodfacts.org/) website.
-We call a report a "**flag**" and a report will be associated with a "**ticket**" if it does not exist for this product or image. Else it will be associated with the existing ticket.
+The nutripatrol API is used to report and manage issues with products and images on [Open Food Facts](https://world.openfoodfacts.org/), Open Prices, Open Pet Food Facts, Open Beauty Facts.
+We call a report a "**flag**" and a report will be associated with a "**ticket**" if it does not exist for this product or image. Otherwise it will be associated with the existing ticket.
 
 ## Flags
 
-A flag contained the following fields:
+A flag containes the following main fields:
 - `barcode`: Barcode of the product, if the flag is about a product or a product image. In case of a search issue, this field is null.
+
 - `type`: Type of the issue. It can be `product`, `image` or `search`.
 - `url`: URL of the product or of the flagged image.
 - `user_id`: Open Food Facts User ID of the flagger.
@@ -35,23 +36,22 @@ A flag contained the following fields:
 - `confidence`: Confidence score of the model that generated the flag, this field should only be provided by Robotoff.
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
-- `reason`: Reason for flagging provided by the user. The field is optional.
+- `reason`: Reason for flagging provided by the user. For images, it can be `image_to_delete_wrong_product`,
+
+`image_to_delete_spam` or `image_to_delete_face`. For products it can be `product_to_delete`. The field is optional.
 - `comment`: Comment provided by the user during flagging. This is a free text field.
-- `created_at`: Creation datetime of the flag.
-- `device_id`: Device ID of the flagger.
-- `ticket_id`: ID of the ticket associated with the flag.
 
 ## Tickets
 Automatically created when a flag is created and no ticket exists for the product or image.
 
-A ticket contained the following fields:
+A ticket containes the following main fields:
 - `barcode`: Barcode of the product, if the ticket is about a product or a product image. In case of a search issue, this field is null.
+
 - `type`: Type of the issue. It can be `product`, `image` or `search`.
 - `url`: URL of the product or of the flagged image.
 - `status`: Status of the ticket. It can be `open` or `closed`.
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
-- `created_at`: Creation datetime of the ticket.
 
 
 """
