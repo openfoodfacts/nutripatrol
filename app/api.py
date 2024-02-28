@@ -216,8 +216,11 @@ def create_flag(flag: FlagCreate, request: Request):
     """Create a flag for a product.
 
     This function is used to create a flag for a product or an image.
-    At the same time,
-    it creates a ticket if it does not exist for this product or image.
+    A flag is a request for a product or an image to be reviewed.
+    A flag is associated with a ticket.
+    A ticket is created if it does not exist for this product or image.
+    A ticket can be associated with multiple flags.
+
 
     :return: the created flag with the assigned ticket
     """
@@ -286,7 +289,6 @@ def get_flag(flag_id: int):
 
     This function is used to get a flag by its ID.
 
-    :param flag_id: the ID of the flag
     :return: the flag
     """
     with db:
@@ -305,6 +307,7 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
     """Create a ticket.
 
     This function is used to create a ticket for a product or an image.
+    A ticket is a request for a product or an image to be reviewed.
 
     :return: the created ticket
     """
@@ -330,7 +333,6 @@ def get_ticket(ticket_id: int):
 
     This function is used to get a ticket by its ID.
 
-    :param ticket_id: the ID of the ticket
     :return: the ticket
     """
     with db:
@@ -346,7 +348,6 @@ def get_flags_by_ticket(ticket_id: int):
 
     This function is used to get all flags for a ticket by its ID.
 
-    :param ticket_id: the ID of the ticket
     :return: a list of flags
     """
     with db:
@@ -366,8 +367,6 @@ def update_ticket_status(ticket_id: int, status: TicketStatus):
 
     This function is used to update the status of a ticket by its ID.
 
-    :param ticket_id: the ID of the ticket
-    :param status: the new status of the ticket
     :return: the updated ticket
     """
     with db:
