@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
 from openfoodfacts import Flavor
 from openfoodfacts.images import generate_image_url
 from openfoodfacts.utils import URLBuilder, get_logger
