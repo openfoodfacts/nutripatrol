@@ -21,8 +21,45 @@ from app.utils import init_sentry
 
 logger = get_logger(level=settings.log_level.to_int())
 
+description = """
+The nutripatrol API is used to report and manage issues with products and images on [Open Food Facts](https://world.openfoodfacts.org/), Open Prices, Open Pet Food Facts, Open Beauty Facts.
+We call a report a "**flag**" and a report will be associated with a "**ticket**" if it does not exist for this product or image. Otherwise it will be associated with the existing ticket.
+
+## Flags
+
+A flag containes the following main fields:
+- `barcode`: Barcode of the product, if the flag is about a product or a product image. In case of a search issue, this field is null.
+
+- `type`: Type of the issue. It can be `product`, `image` or `search`.
+- `url`: URL of the product or of the flagged image.
+- `user_id`: Open Food Facts User ID of the flagger.
+- `source`: Source of the flag. It can be a user from the mobile app, the web or a flag generated automatically by robotoff.
+- `confidence`: Confidence score of the model that generated the flag, this field should only be provided by Robotoff.
+- `image_id`: ID of the flagged image, if the ticket type is `image`.
+- `flavor`: Flavor (project) associated with the ticket.
+- `reason`: Reason for flagging provided by the user. For images, it can be `image_to_delete_wrong_product`,
+
+`image_to_delete_spam` or `image_to_delete_face`. For products it can be `product_to_delete`. The field is optional.
+- `comment`: Comment provided by the user during flagging. This is a free text field.
+
+## Tickets
+Automatically created when a flag is created and no ticket exists for the product or image.
+
+A ticket containes the following main fields:
+- `barcode`: Barcode of the product, if the ticket is about a product or a product image. In case of a search issue, this field is null.
+
+- `type`: Type of the issue. It can be `product`, `image` or `search`.
+- `url`: URL of the product or of the flagged image.
+- `status`: Status of the ticket. It can be `open` or `closed`.
+- `image_id`: ID of the flagged image, if the ticket type is `image`.
+- `flavor`: Flavor (project) associated with the ticket.
+
+
+"""
+
 app = FastAPI(
     title="nutripatrol",
+    description=description,
     contact={
         "name": "The Open Food Facts team",
         "url": "https://world.openfoodfacts.org",
@@ -221,9 +258,16 @@ class Flag(FlagCreate):
     device_id: str = Field(..., description="Device ID of the flagger")
 
 
-# Create a flag (one to one relationship)
 @api_v1_router.post("/flags")
 def create_flag(flag: FlagCreate, request: Request):
+    """Create a flag for a product.
+
+    This function is used to create a flag for a product or an image.
+    A flag is a request for a product or an image to be reviewed.
+    A flag is associated with a ticket.
+    A ticket is created if it does not exist for this product or image.
+    A ticket can be associated with multiple flags.
+    """
     with db:
         # Check if the flag already exists
         if (
@@ -271,16 +315,22 @@ def create_flag(flag: FlagCreate, request: Request):
         )
 
 
-# Get all flags (one to many relationship)
 @api_v1_router.get("/flags")
 def get_flags():
+    """Get all flags.
+
+    This function is used to get all flags.
+    """
     with db:
         return {"flags": list(FlagModel.select().dicts().iterator())}
 
 
-# Get flag by ID (one to one relationship)
 @api_v1_router.get("/flags/{flag_id}")
 def get_flag(flag_id: int):
+    """Get a flag by ID.
+
+    This function is used to get a flag by its ID.
+    """
     with db:
         try:
             return FlagModel.get_by_id(flag_id)
@@ -292,23 +342,33 @@ def _create_ticket(ticket: TicketCreate):
     return TicketModel.create(**ticket.model_dump())
 
 
-# Create a ticket (one to one relationship)
 @api_v1_router.post("/tickets")
 def create_ticket(ticket: TicketCreate) -> Ticket:
+    """Create a ticket.
+
+    This function is used to create a ticket for a product or an image.
+    A ticket is a request for a product or an image to be reviewed.
+    """
     with db:
         return _create_ticket(ticket)
 
 
-# Get all tickets (one to many relationship)
 @api_v1_router.get("/tickets")
 def get_tickets():
+    """Get all tickets.
+
+    This function is used to get all tickets.
+    """
     with db:
         return {"tickets": list(TicketModel.select().dicts().iterator())}
 
 
-# Get ticket by id (one to one relationship)
 @api_v1_router.get("/tickets/{ticket_id}")
 def get_ticket(ticket_id: int):
+    """Get a ticket by ID.
+
+    This function is used to get a ticket by its ID.
+    """
     with db:
         try:
             return model_to_dict(TicketModel.get_by_id(ticket_id))
@@ -316,9 +376,12 @@ def get_ticket(ticket_id: int):
             raise HTTPException(status_code=404, detail="Not found")
 
 
-# Get all flags for a ticket by id (one to many relationship)
 @api_v1_router.get("/tickets/{ticket_id}/flags")
 def get_flags_by_ticket(ticket_id: int):
+    """Get all flags for a ticket by ID.
+
+    This function is used to get all flags for a ticket by its ID.
+    """
     with db:
         return {
             "flags": list(
@@ -330,9 +393,12 @@ def get_flags_by_ticket(ticket_id: int):
         }
 
 
-# Update ticket status by id with enum : open, closed (soft delete)
 @api_v1_router.put("/tickets/{ticket_id}/status")
 def update_ticket_status(ticket_id: int, status: TicketStatus):
+    """Update the status of a ticket by ID.
+
+    This function is used to update the status of a ticket by its ID.
+    """
     with db:
         try:
             ticket = TicketModel.get_by_id(ticket_id)
