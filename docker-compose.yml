@@ -10,6 +10,7 @@ x-api-common: &api-common
     - POSTGRES_PASSWORD
     - POSTGRES_DB
     - POSTGRES_HOST
+    - CORS_ALLOW_ORIGINS
   networks:
     - default
 
