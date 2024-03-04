@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = "postgres"
     postgres_port: int = 5432
-    cors_allow_origins: list[str] = Field(default=[])
+    cors_allow_origins: list[str] = Field(default=["http://localhost:5173"])
     off_tld: Environment = Environment.net
     environment: str = "dev"
     migration_dir: Path = PROJECT_DIR / "migrations"

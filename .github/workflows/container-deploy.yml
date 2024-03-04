@@ -115,6 +115,7 @@ jobs:
           echo "ENVIRONMENT=${{ env.ENVIRONMENT }}" >> .env
           # Expose API on port 9010
           echo "API_EXPOSE=0.0.0.0:9010" >> .env
+          echo 'CORS_ALLOW_ORIGINS=["https://nutripatrol.openfoodfacts.net", "https://nutripatrol.openfoodfacts.org"]' >> .env
           echo "POSTGRES_HOST=postgres" >> .env
           echo "POSTGRES_DB=postgres" >> .env
           echo "POSTGRES_USER=postgres" >> .env
