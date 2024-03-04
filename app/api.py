@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from openfoodfacts import Flavor
@@ -68,6 +69,15 @@ app = FastAPI(
         "name": " AGPL-3.0",
         "url": "https://www.gnu.org/licenses/agpl-3.0.en.html",
     },
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_allow_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 api_v1_router = APIRouter(prefix="/api/v1")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")

@@ -2,6 +2,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from openfoodfacts import Environment
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 PROJECT_DIR = Path(__file__).parent.parent
@@ -38,6 +39,7 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = "postgres"
     postgres_port: int = 5432
+    cors_allow_origins: list[str] = Field(default_factory=list)
     off_tld: Environment = Environment.net
     environment: str = "dev"
     migration_dir: Path = PROJECT_DIR / "migrations"
