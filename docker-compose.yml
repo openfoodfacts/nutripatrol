@@ -38,6 +38,7 @@ services:
       - "${POSTGRES_EXPOSE:-127.0.0.1:5432}:5432"
 
   nginx: 
+    restart: $RESTART_POLICY
     image: nginx:1.25-alpine
     volumes:
       # Mount the nginx configuration file
