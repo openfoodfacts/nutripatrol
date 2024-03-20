@@ -325,6 +325,24 @@ def get_flags():
         return {"flags": list(FlagModel.select().dicts().iterator())}
 
 
+@api_v1_router.get("/flags/image-moderation")
+def get_image_moderation_flags():
+    """Get all flags for image moderation.
+
+    This function is used to get all flags for image
+    moderation by getting all flags of type `image`.
+    """
+    with db:
+        return {
+            "flags": list(
+                FlagModel.select()
+                .where(FlagModel.type == IssueType.image)
+                .dicts()
+                .iterator()
+            )
+        }
+
+
 @api_v1_router.get("/flags/{flag_id}")
 def get_flag(flag_id: int):
     """Get a flag by ID.
