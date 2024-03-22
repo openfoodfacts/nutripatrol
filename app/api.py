@@ -362,7 +362,9 @@ def get_tickets():
     with db:
         return {
             "tickets": list(
-                TicketModel.select().where(TicketModel.status == TicketStatus.open).dicts()
+                TicketModel.select()
+                .where(TicketModel.status == TicketStatus.open)
+                .dicts()
             )
         }
 
