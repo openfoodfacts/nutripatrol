@@ -357,10 +357,14 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 def get_tickets():
     """Get all tickets.
 
-    This function is used to get all tickets.
+    This function is used to get all tickets with status open
     """
     with db:
-        return {"tickets": list(TicketModel.select().dicts().iterator())}
+        return {
+            "tickets": list(
+                TicketModel.select().where(TicketModel.status == TicketStatus.open).dicts()
+            )
+        }
 
 
 @api_v1_router.get("/tickets/image-moderation")
@@ -368,12 +372,15 @@ def get_image_moderation_flags():
     """Get all tickets for image moderation.
 
     This function is used to get all tickets for image
-    moderation by getting all tickets of type `image`.
+    moderation by getting all tickets of type `image` and status open.
     """
     with db:
         return {
             "tickets": list(
-                TicketModel.select().where(TicketModel.type == IssueType.image).dicts().iterator()
+                TicketModel.select()
+                .where(TicketModel.type == IssueType.image)
+                .where(TicketModel.status == TicketStatus.open)
+                .dicts()
             )
         }
 
