@@ -339,6 +339,7 @@ def get_flag(flag_id: int):
 
 
 def _create_ticket(ticket: TicketCreate):
+    """Create a ticket."""
     return TicketModel.create(**ticket.model_dump())
 
 
@@ -354,7 +355,7 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 
 
 def _get_ticket(status: TicketStatus, type: IssueType):
-
+    """Get tickets with optional filters."""
     query = TicketModel.select()
 
     if status is not None:
