@@ -354,33 +354,22 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 
 
 @api_v1_router.get("/tickets")
-def get_tickets():
+def get_tickets(type: IssueType = None):
     """Get all tickets.
 
     This function is used to get all tickets with status open
     """
     with db:
+        if type is None:
+            return {
+                "tickets": list(
+                    TicketModel.select().where(TicketModel.status == TicketStatus.open).dicts()
+                )
+            }
         return {
             "tickets": list(
                 TicketModel.select()
-                .where(TicketModel.status == TicketStatus.open)
-                .dicts()
-            )
-        }
-
-
-@api_v1_router.get("/tickets/image-moderation")
-def get_image_moderation_flags():
-    """Get all tickets for image moderation.
-
-    This function is used to get all tickets for image
-    moderation by getting all tickets of type `image` and status open.
-    """
-    with db:
-        return {
-            "tickets": list(
-                TicketModel.select()
-                .where(TicketModel.type == IssueType.image)
+                .where(TicketModel.type == type)
                 .where(TicketModel.status == TicketStatus.open)
                 .dicts()
             )
