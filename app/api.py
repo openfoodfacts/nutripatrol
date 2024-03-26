@@ -354,28 +354,28 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
         return _create_ticket(ticket)
 
 
-def _get_ticket(status: TicketStatus, type: IssueType):
+def _get_ticket(status: TicketStatus | None, type_: IssueType | None):
     """Get tickets with optional filters."""
     query = TicketModel.select()
 
     if status is not None:
         query = query.where(TicketModel.status == status)
 
-    if type is not None:
-        query = query.where(TicketModel.type == type)
+    if type_ is not None:
+        query = query.where(TicketModel.type == type_)
 
     with db:
         return {"tickets": list(query.dicts())}
 
 
 @api_v1_router.get("/tickets")
-def get_tickets(status: TicketStatus = None, type: IssueType = None):
+def get_tickets(status: TicketStatus | None = None, type_: IssueType | None = None):
     """Get all tickets.
 
     This function is used to get all tickets with status open
     """
     with db:
-        return _get_ticket(status, type)
+        return _get_ticket(status, type_)
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
