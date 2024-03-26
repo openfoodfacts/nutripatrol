@@ -1,5 +1,5 @@
-from collections import defaultdict
 import hashlib
+from collections import defaultdict
 from datetime import datetime
 from enum import StrEnum, auto
 from pathlib import Path
@@ -403,17 +403,18 @@ def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest):
     This function is used to get all flags for tickets by there IDs.
     """
     with db:
-        flags = list(FlagModel.select().where(FlagModel.ticket_id.in_(flag_request.ticket_ids)).dicts())
+        flags = list(
+            FlagModel.select()
+            .where(FlagModel.ticket_id.in_(flag_request.ticket_ids))
+            .dicts()
+        )
 
     ticket_id_to_flags = defaultdict(list)
     for flag in flags:
         ticket_id_to_flags[flag["ticket"]].append(flag)
 
     return [
-        {
-            "ticket_id": id_,
-            "flags": ticket_id_to_flags[id_]
-        }
+        {"ticket_id": id_, "flags": ticket_id_to_flags[id_]}
         for id_ in flag_request.ticket_ids
     ]
 
