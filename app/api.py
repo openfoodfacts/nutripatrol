@@ -370,7 +370,7 @@ def _get_ticket(status: TicketStatus | None, type_: IssueType | None):
         query = query.where(TicketModel.type == type_)
 
     with db:
-        return {"tickets": list(query.dicts())}
+        return list(query.dicts())
 
 
 @api_v1_router.get("/tickets")
