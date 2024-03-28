@@ -413,7 +413,7 @@ def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest):
     for flag in flags:
         ticket_id_to_flags[flag["ticket"]].append(flag)
 
-    return {'ticket_id_to_flags': dict(ticket_id_to_flags)}
+    return {"ticket_id_to_flags": dict(ticket_id_to_flags)}
 
 
 @api_v1_router.put("/tickets/{ticket_id}/status")
