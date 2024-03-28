@@ -377,7 +377,7 @@ def _get_ticket(status: TicketStatus | None, type_: IssueType | None):
 def get_tickets(status: TicketStatus | None = None, type_: IssueType | None = None):
     """Get all tickets.
 
-    This function is used to get all tickets with status open
+    This function is used to get all tickets with status open.
     """
     with db:
         return _get_ticket(status, type_)
