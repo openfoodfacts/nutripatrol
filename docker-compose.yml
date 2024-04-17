@@ -11,6 +11,7 @@ x-api-common: &api-common
     - POSTGRES_DB
     - POSTGRES_HOST
     - CORS_ALLOW_ORIGINS
+    - OFF_TLD
   networks:
     - default
 
