@@ -35,11 +35,13 @@ jobs:
       run: |
         echo "SSH_HOST=10.1.0.200" >> $GITHUB_ENV
         echo "ENVIRONMENT=staging" >> $GITHUB_ENV
+        echo "OFF_TLD=net" >> $GITHUB_ENV
     - name: Set various variable for staging (org) deployment
       if: matrix.env == 'nutripatrol-org'
       run: |
         echo "SSH_HOST=10.1.0.201" >> $GITHUB_ENV
         echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+        echo "OFF_TLD=org" >> $GITHUB_ENV
     - name: Wait for docker image container build workflow
       uses: tomchv/wait-my-workflow@v1.1.0
       id: wait-build
@@ -113,6 +115,7 @@ jobs:
           echo "RESTART_POLICY=always" >> .env
           echo "SENTRY_DNS=${{ secrets.SENTRY_DSN }}" >> .env
           echo "ENVIRONMENT=${{ env.ENVIRONMENT }}" >> .env
+          echo "OFF_TLD=${{ env.OFF_TLD }}" >> .env
           # Expose API on port 9010
           echo "API_EXPOSE=0.0.0.0:9010" >> .env
           echo 'CORS_ALLOW_ORIGINS=["https://nutripatrol.openfoodfacts.net", "https://nutripatrol.openfoodfacts.org"]' >> .env
