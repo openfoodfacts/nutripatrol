@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.0.2...v1.1.0) (2024-04-19)
+
+
+### Features
+
+* add route to get image Tickets ([#45](https://github.com/openfoodfacts/nutripatrol/issues/45)) ([3ec2a4f](https://github.com/openfoodfacts/nutripatrol/commit/3ec2a4f138e6a4816f57586195eb0e087606d4bd))
+* docker nginx conf v1 ([#31](https://github.com/openfoodfacts/nutripatrol/issues/31)) ([e32baed](https://github.com/openfoodfacts/nutripatrol/commit/e32baed9c19a5f9fd72f27ab41948aeee15c1b73))
+
+
+### Bug Fixes
+
+* add cors middleware to Nutripatrol API ([#39](https://github.com/openfoodfacts/nutripatrol/issues/39)) ([67de9c6](https://github.com/openfoodfacts/nutripatrol/commit/67de9c6c033044fa1f3abf9fb0ce92e5f6b37f27))
+* expose frontend on / instead of /app/ ([45937db](https://github.com/openfoodfacts/nutripatrol/commit/45937db8f839392aef78b6bd88a9617e56547912))
+* restart policy nginx ([#43](https://github.com/openfoodfacts/nutripatrol/issues/43)) ([835e411](https://github.com/openfoodfacts/nutripatrol/commit/835e4111aec7ea4d4d3f4b63c275480561478895))
+* wrong comment ([1ee8d43](https://github.com/openfoodfacts/nutripatrol/commit/1ee8d432f622344e7243646d0f3758a30c5ef606))
+
 ## [1.0.2](https://github.com/openfoodfacts/nutripatrol/compare/v1.0.1...v1.0.2) (2024-02-22)
 
 
