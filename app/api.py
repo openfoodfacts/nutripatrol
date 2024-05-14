@@ -387,10 +387,15 @@ def get_tickets(
     with db:
         offset = (page - 1) * page_size
         # Get the total number of opend and type tickets
-        max_page = TicketModel.select().where(
-            (TicketModel.status == status if status else True)
-            & (TicketModel.type == type_ if type_ else True)
-        ).count() // page_size
+        max_page = (
+            TicketModel.select()
+            .where(
+                (TicketModel.status == status if status else True)
+                & (TicketModel.type == type_ if type_ else True)
+            )
+            .count()
+            // page_size
+        )
         if max_page * page_size < TicketModel.select().count():
             max_page += 1
         if page > max_page:
