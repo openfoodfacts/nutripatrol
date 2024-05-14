@@ -359,20 +359,6 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
         return _create_ticket(ticket)
 
 
-# def _get_ticket(status: TicketStatus | None, type_: IssueType | None):
-#     """Get tickets with optional filters."""
-#     query = TicketModel.select()
-
-#     if status is not None:
-#         query = query.where(TicketModel.status == status)
-
-#     if type_ is not None:
-#         query = query.where(TicketModel.type == type_)
-
-#     with db:
-#         return list(query.dicts())
-
-
 @api_v1_router.get("/tickets")
 def get_tickets(
     status: TicketStatus | None = None,
