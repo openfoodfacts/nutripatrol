@@ -391,6 +391,8 @@ def get_tickets(
             (TicketModel.status == status if status else True)
             & (TicketModel.type == type_ if type_ else True)
         ).count() // page_size
+        if max_page * page_size < TicketModel.select().count():
+            max_page += 1
         if page > max_page:
             raise HTTPException(
                 status_code=404,
