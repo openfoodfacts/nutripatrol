@@ -374,7 +374,12 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 
 
 @api_v1_router.get("/tickets")
-def get_tickets(status: TicketStatus | None = None, type_: IssueType | None = None, page: int = 1, page_size: int = 10):
+def get_tickets(
+    status: TicketStatus | None = None,
+    type_: IssueType | None = None,
+    page: int = 1,
+    page_size: int = 10
+):
     """Get all tickets.
 
     This function is used to get all tickets with status open.
