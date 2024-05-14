@@ -378,7 +378,7 @@ def get_tickets(
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
     page: int = 1,
-    page_size: int = 10
+    page_size: int = 10,
 ):
     """Get all tickets.
 
