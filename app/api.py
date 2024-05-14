@@ -386,14 +386,30 @@ def get_tickets(
     """
     with db:
         offset = (page - 1) * page_size
-        return list(
-            TicketModel.select()
-            .where(TicketModel.status == status)
-            .where(TicketModel.type == type_)
-            .offset(offset)
-            .limit(page_size)
-            .dicts()
-        )
+        # Get the total number of opend and type tickets
+        max_page = TicketModel.select().where(
+            (TicketModel.status == status if status else True)
+            & (TicketModel.type == type_ if type_ else True)
+        ).count() // page_size
+        if page > max_page:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Page {page} not found. Max page is {max_page}",
+            )
+        return {
+            "tickets": list(
+                TicketModel.select()
+                .where(
+                    (TicketModel.status == status if status else True)
+                    & (TicketModel.type == type_ if type_ else True)
+                )
+                .order_by(TicketModel.created_at.desc())
+                .offset(offset)
+                .limit(page_size)
+                .dicts()
+            ),
+            "max_page": max_page,
+        }
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
