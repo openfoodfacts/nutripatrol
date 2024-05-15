@@ -38,7 +38,7 @@ A flag containes the following main fields:
 - `confidence`: Confidence score of the model that generated the flag, this field should only be provided by Robotoff.
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
-- `reason`: Reason for flagging provided by the user. For images, it can be `image_to_delete_wrong_product`,
+- `reason`: Reason for flagging provided by the user. For images, it can be `inappropriate`, `human`, `beauty` or `other`
 
 `image_to_delete_spam` or `image_to_delete_face`. For products it can be `product_to_delete`. The field is optional.
 - `comment`: Comment provided by the user during flagging. This is a free text field.
@@ -121,6 +121,15 @@ class IssueType(StrEnum):
     image = auto()
     # Issue about search results
     search = auto()
+
+
+class ReasonType(StrEnum):
+    """Type of the reason for flagging."""
+
+    inappropriate = auto()
+    human = auto()
+    beauty = auto()
+    other = auto()
 
 
 class TicketCreate(BaseModel):
@@ -282,6 +291,7 @@ def create_flag(flag: FlagCreate, request: Request):
                 FlagModel.type == flag.type,
                 FlagModel.flavor == flag.flavor,
                 FlagModel.user_id == flag.user_id,
+                FlagModel.reason == flag.reason,
             )
             is not None
         ):
@@ -363,6 +373,7 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 def get_tickets(
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
+    reason_: ReasonType | None = None,
     page: int = 1,
     page_size: int = 10,
 ):
@@ -372,6 +383,16 @@ def get_tickets(
     """
     with db:
         offset = (page - 1) * page_size
+        # Get IDs of flags with the specified filters
+        flag_ids = (
+            FlagModel.select(FlagModel.ticket_id)
+            .where(
+                (FlagModel.type == type_ if type_ else True)
+                & (FlagModel.reason == reason_ if reason_ else True)
+            )
+            .distinct()
+        )
+
         # Get the total number of tickets with the specified filters
         count = (
             TicketModel.select()
@@ -390,6 +411,7 @@ def get_tickets(
                 .where(
                     (TicketModel.status == status if status else True)
                     & (TicketModel.type == type_ if type_ else True)
+                    & (TicketModel.id.in_(flag_ids) if flag_ids else True)
                 )
                 .order_by(TicketModel.created_at.desc())
                 .offset(offset)
