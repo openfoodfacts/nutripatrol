@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/openfoodfacts/nutripatrol/compare/v1.1.0...v1.1.1) (2024-05-15)
+
+
+### Bug Fixes
+
+* add pagination ([#49](https://github.com/openfoodfacts/nutripatrol/issues/49)) ([96c42b1](https://github.com/openfoodfacts/nutripatrol/commit/96c42b1f71e79c032d30ca02db85f2aa0693f24e))
+* return empty list when error ([#52](https://github.com/openfoodfacts/nutripatrol/issues/52)) ([fc472cb](https://github.com/openfoodfacts/nutripatrol/commit/fc472cbe80a319afaf0fd7ca785ecb65ad870e7a))
+
 ## [1.1.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.0.2...v1.1.0) (2024-04-19)
 
 
