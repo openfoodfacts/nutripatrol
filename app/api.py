@@ -383,10 +383,10 @@ def get_tickets(
         )
         max_page = count // page_size + int(count % page_size != 0)
         if page > max_page:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Page {page} not found. Max page is {max_page}",
-            )
+            return {
+                "tickets": [],
+                "max_page": max_page
+            }
         return {
             "tickets": list(
                 TicketModel.select()
