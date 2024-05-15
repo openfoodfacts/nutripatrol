@@ -373,7 +373,7 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 def get_tickets(
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
-    reason_: ReasonType | None = "inappropriate",
+    reason: ReasonType | None = "inappropriate",
     page: int = 1,
     page_size: int = 10,
 ):
@@ -384,22 +384,22 @@ def get_tickets(
     with db:
         offset = (page - 1) * page_size
         # Get IDs of flags with the specified filters
-        flag_ids = (
-            FlagModel.select(FlagModel.ticket_id)
-            .where(
-                (FlagModel.type == type_ if type_ else True)
-                & (FlagModel.reason == reason_ if reason_ else True)
+        where_clause = []
+        if status:
+            where_clause.append(TicketModel.status == status)
+        if type_:
+            where_clause.append(TicketModel.type == type_)
+        if reason:
+            subquery = (
+                FlagModel.select(FlagModel.ticket_id)
+                .where(FlagModel.reason == reason)
             )
-            .distinct()
-        )
+            where_clause.append(TicketModel.id.in_(subquery))
 
         # Get the total number of tickets with the specified filters
         count = (
             TicketModel.select()
-            .where(
-                (TicketModel.status == status if status else True)
-                & (TicketModel.type == type_ if type_ else True)
-            )
+            .where(*where_clause)
             .count()
         )
         max_page = count // page_size + int(count % page_size != 0)
@@ -408,11 +408,7 @@ def get_tickets(
         return {
             "tickets": list(
                 TicketModel.select()
-                .where(
-                    (TicketModel.status == status if status else True)
-                    & (TicketModel.type == type_ if type_ else True)
-                    & (TicketModel.id.in_(flag_ids) if flag_ids else True)
-                )
+                .where(*where_clause)
                 .order_by(TicketModel.created_at.desc())
                 .offset(offset)
                 .limit(page_size)
