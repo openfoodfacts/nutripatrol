@@ -3,9 +3,9 @@ from collections import defaultdict
 from datetime import datetime
 from enum import StrEnum, auto
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -373,7 +373,7 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 def get_tickets(
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
-    reason: ReasonType | None = "inappropriate",
+    reason: Annotated[list[ReasonType] | None, Query()] = None,
     page: int = 1,
     page_size: int = 10,
 ):
@@ -391,7 +391,7 @@ def get_tickets(
             where_clause.append(TicketModel.type == type_)
         if reason:
             subquery = FlagModel.select(FlagModel.ticket_id).where(
-                FlagModel.reason == reason
+                FlagModel.reason.in_(reason)
             )
             where_clause.append(TicketModel.id.in_(subquery))
 
