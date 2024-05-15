@@ -390,18 +390,13 @@ def get_tickets(
         if type_:
             where_clause.append(TicketModel.type == type_)
         if reason:
-            subquery = (
-                FlagModel.select(FlagModel.ticket_id)
-                .where(FlagModel.reason == reason)
+            subquery = FlagModel.select(FlagModel.ticket_id).where(
+                FlagModel.reason == reason
             )
             where_clause.append(TicketModel.id.in_(subquery))
 
         # Get the total number of tickets with the specified filters
-        count = (
-            TicketModel.select()
-            .where(*where_clause)
-            .count()
-        )
+        count = TicketModel.select().where(*where_clause).count()
         max_page = count // page_size + int(count % page_size != 0)
         if page > max_page:
             return {"tickets": [], "max_page": max_page}
