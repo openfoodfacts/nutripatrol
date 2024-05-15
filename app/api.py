@@ -3,9 +3,9 @@ from collections import defaultdict
 from datetime import datetime
 from enum import StrEnum, auto
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -38,7 +38,7 @@ A flag containes the following main fields:
 - `confidence`: Confidence score of the model that generated the flag, this field should only be provided by Robotoff.
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
-- `reason`: Reason for flagging provided by the user. For images, it can be `image_to_delete_wrong_product`,
+- `reason`: Reason for flagging provided by the user. For images, it can be `inappropriate`, `human`, `beauty` or `other`
 
 `image_to_delete_spam` or `image_to_delete_face`. For products it can be `product_to_delete`. The field is optional.
 - `comment`: Comment provided by the user during flagging. This is a free text field.
@@ -121,6 +121,15 @@ class IssueType(StrEnum):
     image = auto()
     # Issue about search results
     search = auto()
+
+
+class ReasonType(StrEnum):
+    """Type of the reason for flagging."""
+
+    inappropriate = auto()
+    human = auto()
+    beauty = auto()
+    other = auto()
 
 
 class TicketCreate(BaseModel):
@@ -282,6 +291,7 @@ def create_flag(flag: FlagCreate, request: Request):
                 FlagModel.type == flag.type,
                 FlagModel.flavor == flag.flavor,
                 FlagModel.user_id == flag.user_id,
+                FlagModel.reason == flag.reason,
             )
             is not None
         ):
@@ -363,6 +373,7 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 def get_tickets(
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
+    reason: Annotated[list[ReasonType] | None, Query()] = None,
     page: int = 1,
     page_size: int = 10,
 ):
@@ -372,25 +383,27 @@ def get_tickets(
     """
     with db:
         offset = (page - 1) * page_size
-        # Get the total number of tickets with the specified filters
-        count = (
-            TicketModel.select()
-            .where(
-                (TicketModel.status == status if status else True)
-                & (TicketModel.type == type_ if type_ else True)
+        # Get IDs of flags with the specified filters
+        where_clause = []
+        if status:
+            where_clause.append(TicketModel.status == status)
+        if type_:
+            where_clause.append(TicketModel.type == type_)
+        if reason:
+            subquery = FlagModel.select(FlagModel.ticket_id).where(
+                FlagModel.reason.in_(reason)
             )
-            .count()
-        )
+            where_clause.append(TicketModel.id.in_(subquery))
+
+        # Get the total number of tickets with the specified filters
+        count = TicketModel.select().where(*where_clause).count()
         max_page = count // page_size + int(count % page_size != 0)
         if page > max_page:
             return {"tickets": [], "max_page": max_page}
         return {
             "tickets": list(
                 TicketModel.select()
-                .where(
-                    (TicketModel.status == status if status else True)
-                    & (TicketModel.type == type_ if type_ else True)
-                )
+                .where(*where_clause)
                 .order_by(TicketModel.created_at.desc())
                 .offset(offset)
                 .limit(page_size)
