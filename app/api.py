@@ -372,7 +372,7 @@ def get_tickets(
     """
     with db:
         offset = (page - 1) * page_size
-        # Get the total number of opend and type tickets
+        # Get the total number of tickets with the specified filters
         count = (
             TicketModel.select()
             .where(
@@ -382,8 +382,6 @@ def get_tickets(
             .count()
         )
         max_page = count // page_size + int(count % page_size != 0)
-        if max_page * page_size < count:
-            max_page += 1
         if page > max_page:
             raise HTTPException(
                 status_code=404,
