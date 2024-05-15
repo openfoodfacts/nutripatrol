@@ -373,7 +373,7 @@ def create_ticket(ticket: TicketCreate) -> Ticket:
 def get_tickets(
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
-    reason_: ReasonType | None = None,
+    reason_: ReasonType | None = "inappropriate",
     page: int = 1,
     page_size: int = 10,
 ):
