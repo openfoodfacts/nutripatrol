@@ -1,0 +1,5 @@
+# Please see https://github.com/actions/labeler for reference
+
+GitHub Actions:
+- changed-files:
+  - any-glob-to-any-file: '.github/**/*'
