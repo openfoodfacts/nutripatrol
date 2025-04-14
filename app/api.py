@@ -5,7 +5,7 @@ from enum import StrEnum, auto
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -17,6 +17,7 @@ from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, Field, model_validator
 
 from app.config import settings
+from app.middleware.auth import auth_dependency
 from app.models import FlagModel, TicketModel, db
 from app.utils import init_sentry
 
@@ -272,7 +273,7 @@ class FlagsByTicketIdRequest(BaseModel):
     ticket_ids: list[int]
 
 
-@api_v1_router.post("/flags")
+@api_v1_router.post("/flags", dependencies=[Depends(auth_dependency)])
 def create_flag(flag: FlagCreate, request: Request):
     """Create a flag for a product.
 
