@@ -11,15 +11,19 @@ if PO_AUTH_ROUTE is None:
 
 
 async def auth_dependency(request: Request):
-    token = request.headers.get("Authorization")
+    session_cookie = request.cookies.get("session")
+    print(f"Request : {request.cookies}")
 
-    if not token or not token.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
-
-    token_value = token.split("Bearer ")[1]
+    if not session_cookie:
+        raise HTTPException(status_code=401, detail="Missing session token")
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(PO_AUTH_ROUTE, params={"token": token_value})
+        response = await client.get(PO_AUTH_ROUTE, cookies={"session": session_cookie}, params={"body": "1"})
 
         if response.status_code != 200:
             raise HTTPException(status_code=401, detail="Invalid token")
+
+        moderator = response.json().get("user", {}).get("moderator")
+
+        if moderator == 0:
+            raise HTTPException(status_code=403, detail="User is not authorized to access this resource")

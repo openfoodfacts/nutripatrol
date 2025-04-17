@@ -273,7 +273,7 @@ class FlagsByTicketIdRequest(BaseModel):
     ticket_ids: list[int]
 
 
-@api_v1_router.post("/flags", dependencies=[Depends(auth_dependency)])
+@api_v1_router.post("/flags")
 def create_flag(flag: FlagCreate, request: Request):
     """Create a flag for a product.
 
@@ -447,7 +447,7 @@ def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest):
     return {"ticket_id_to_flags": dict(ticket_id_to_flags)}
 
 
-@api_v1_router.put("/tickets/{ticket_id}/status")
+@api_v1_router.put("/tickets/{ticket_id}/status", dependencies=[Depends(auth_dependency)])
 def update_ticket_status(ticket_id: int, status: TicketStatus):
     """Update the status of a ticket by ID.
 
@@ -461,6 +461,15 @@ def update_ticket_status(ticket_id: int, status: TicketStatus):
             return model_to_dict(ticket)
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Not found")
+
+
+@api_v1_router.get("/auth", dependencies=[Depends(auth_dependency)])
+def auth():
+    """Authentication endpoint.
+
+    This function is used to check if the user is authenticated.
+    """
+    return {"status": "ok"}
 
 
 @api_v1_router.get("/status")
