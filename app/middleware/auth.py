@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 PO_AUTH_ROUTE = os.getenv("PO_AUTH_ROUTE")
+if PO_AUTH_ROUTE is None:
+    raise RuntimeError("PO_AUTH_ROUTE environment variable is not set.")
 
 
 async def auth_dependency(request: Request):
