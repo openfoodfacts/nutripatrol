@@ -274,7 +274,7 @@ class FlagsByTicketIdRequest(BaseModel):
 
 
 @api_v1_router.post("/flags")
-def create_flag(flag: FlagCreate, request: Request):
+def create_flag(flag: FlagCreate, request: Request, _=get_auth_dependency(UserStatus.isLoggedIn)):
     """Create a flag for a product.
 
     This function is used to create a flag for a product or an image.
@@ -331,7 +331,7 @@ def create_flag(flag: FlagCreate, request: Request):
         )
 
 
-@api_v1_router.get("/flags")
+@api_v1_router.get("/flags", _=get_auth_dependency(UserStatus.isLoggedIn))
 def get_flags():
     """Get all flags.
 
@@ -341,7 +341,7 @@ def get_flags():
         return {"flags": list(FlagModel.select().dicts().iterator())}
 
 
-@api_v1_router.get("/flags/{flag_id}")
+@api_v1_router.get("/flags/{flag_id}", _=get_auth_dependency(UserStatus.isLoggedIn))
 def get_flag(flag_id: int):
     """Get a flag by ID.
 
@@ -377,6 +377,7 @@ def get_tickets(
     reason: Annotated[list[ReasonType] | None, Query()] = None,
     page: int = 1,
     page_size: int = 10,
+    _=get_auth_dependency(UserStatus.isLoggedIn)
 ):
     """Get all tickets.
 
@@ -415,7 +416,7 @@ def get_tickets(
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
-def get_ticket(ticket_id: int):
+def get_ticket(ticket_id: int, _=get_auth_dependency(UserStatus.isLoggedIn)):
     """Get a ticket by ID.
 
     This function is used to get a ticket by its ID.
@@ -428,7 +429,7 @@ def get_ticket(ticket_id: int):
 
 
 @api_v1_router.post("/flags/batch")
-def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest):
+def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest, _=get_auth_dependency(UserStatus.isLoggedIn)):
     """Get all flags for tickets by IDs.
 
     This function is used to get all flags for tickets by there IDs.
@@ -447,7 +448,7 @@ def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest):
     return {"ticket_id_to_flags": dict(ticket_id_to_flags)}
 
 
-@api_v1_router.put("/tickets/{ticket_id}/status")
+@api_v1_router.put("/tickets/{ticket_id}/status", _=get_auth_dependency(UserStatus.isModerator))
 def update_ticket_status(ticket_id: int, status: TicketStatus):
     """Update the status of a ticket by ID.
 
@@ -464,7 +465,7 @@ def update_ticket_status(ticket_id: int, status: TicketStatus):
 
 
 @api_v1_router.get("/auth")
-async def auth(_=get_auth_dependency(UserStatus.isLoggedIn)):
+async def auth(_=get_auth_dependency(UserStatus.isModerator)):
     """Authentication endpoint.
 
     This function is used to check if the user is authenticated.
