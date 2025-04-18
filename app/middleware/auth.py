@@ -28,28 +28,28 @@ async def auth_dependency(request: Request, user_status: UserStatus):
         raise HTTPException(status_code=401, detail="Missing session token")
 
     if user_status not in UserStatus:
-        raise HTTPException(status_code=400, detail="Invalid user status")
+        raise HTTPException(status_code=400, detail=f"Invalid user status : {user_status}")
+
+    user_data = await get_user_data(session_cookie)
 
     if user_status == UserStatus.isModerator:
-        if not await auth_request(session_cookie, UserStatus.isModerator):
+        if user_data.get("moderator") != 1:
             raise HTTPException(status_code=403, detail="User is not a moderator")
 
     elif user_status == UserStatus.isLoggedIn:
-        if not await auth_request(session_cookie, UserStatus.isLoggedIn):
+        if user_data.get("moderator") is None:
             raise HTTPException(status_code=403, detail="User is not logged in")
 
 
-async def auth_request(sessionCookie, user_status: UserStatus):
+async def get_user_data(session_cookie: str) -> dict:
     async with httpx.AsyncClient() as client:
-        response = await client.get(PO_AUTH_ROUTE, cookies={"session": sessionCookie}, params={"body": "1"})
+        response = await client.get(
+            PO_AUTH_ROUTE,
+            cookies={"session": session_cookie},
+            params={"body": "1"}
+        )
 
-        if response.status_code != 200:
-            return False
+    if response.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid session token")
 
-        user_data = response.json().get("user", {})
-        if user_status == UserStatus.isModerator and user_data.get("moderator") == 1:
-            return True
-        elif user_status == UserStatus.isLoggedIn and user_data.get("moderator") is not None:
-            return True
-        else:
-            return False
+    return response.json().get("user", {})
