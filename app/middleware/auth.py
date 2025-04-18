@@ -22,7 +22,6 @@ def get_auth_dependency(user_status: UserStatus):
 
 async def auth_dependency(request: Request, user_status: UserStatus):
     session_cookie = request.cookies.get("session")
-    print("Hello from auth.py")
 
     if not session_cookie:
         raise HTTPException(status_code=401, detail="Missing session token")
