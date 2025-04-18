@@ -5,7 +5,7 @@ from enum import StrEnum, auto
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Depends
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -17,7 +17,7 @@ from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, Field, model_validator
 
 from app.config import settings
-from app.middleware.auth import auth_dependency
+from app.middleware.auth import UserStatus, get_auth_dependency
 from app.models import FlagModel, TicketModel, db
 from app.utils import init_sentry
 
@@ -447,7 +447,7 @@ def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest):
     return {"ticket_id_to_flags": dict(ticket_id_to_flags)}
 
 
-@api_v1_router.put("/tickets/{ticket_id}/status", dependencies=[Depends(auth_dependency)])
+@api_v1_router.put("/tickets/{ticket_id}/status")
 def update_ticket_status(ticket_id: int, status: TicketStatus):
     """Update the status of a ticket by ID.
 
@@ -463,8 +463,8 @@ def update_ticket_status(ticket_id: int, status: TicketStatus):
             raise HTTPException(status_code=404, detail="Not found")
 
 
-@api_v1_router.get("/auth", dependencies=[Depends(auth_dependency)])
-def auth():
+@api_v1_router.get("/auth")
+async def auth(_=get_auth_dependency(UserStatus.isLoggedIn)):
     """Authentication endpoint.
 
     This function is used to check if the user is authenticated.
