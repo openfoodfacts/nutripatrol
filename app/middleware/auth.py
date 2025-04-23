@@ -1,4 +1,5 @@
 from fastapi import Depends, Request, HTTPException
+from fastapi_cache import FastAPICache
 import httpx
 from enum import StrEnum, auto
 
@@ -54,6 +55,14 @@ async def auth_dependency(request: Request, user_status: UserStatus):
 
 
 async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
+    cache = FastAPICache.get_backend()
+    cache_key = f"user-data:{session_cookie}"
+
+    # Try to get from cache first
+    cached_data = await cache.get(cache_key)
+    if cached_data:
+        return cached_data
+
     async with httpx.AsyncClient() as client:
         response = await client.get(
             auth_base_url,
@@ -64,4 +73,10 @@ async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
     if response.status_code != 200:
         raise HTTPException(status_code=401, detail="Invalid session token")
 
-    return response.json().get("user", {})
+    user = response.json().get("user", {})
+
+    # Only cache valid user data
+    if user:
+        await cache.set(cache_key, user, expire=300)  # Cache for 5 min
+
+    return user
