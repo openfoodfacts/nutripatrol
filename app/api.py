@@ -2,6 +2,7 @@ import hashlib
 from collections import defaultdict
 from datetime import datetime
 from enum import StrEnum, auto
+import os
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -491,5 +492,18 @@ def status():
     """Health check endpoint."""
     return {"status": "ok"}
 
+
+# Route only available in dev mode for setting up the session cookie by passing it into the body
+class SessionBody(BaseModel):
+    session: str
+
+
+auth_server_static = os.getenv("AUTH_SERVER_STATIC")
+if auth_server_static and auth_server_static != "":
+    @api_v1_router.post("/set_session_cookie")
+    def set_session_cookie(request: Request, body: SessionBody):
+        response = PlainTextResponse("Session cookie set")
+        response.set_cookie(key="session", value=body.session)
+        return response
 
 app.include_router(api_v1_router)
