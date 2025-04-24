@@ -1,8 +1,9 @@
-from fastapi import Depends, Request, HTTPException
-from fastapi_cache import FastAPICache
-import httpx
 import asyncio
 from enum import StrEnum, auto
+
+import httpx
+from fastapi import Depends, HTTPException, Request
+from fastapi_cache import FastAPICache
 
 
 class UserStatus(StrEnum):
