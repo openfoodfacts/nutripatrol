@@ -1,12 +1,11 @@
 import asyncio
-from enum import StrEnum, auto
-from fastapi_cache.decorator import cache
-
 import hashlib
+import os
+from enum import StrEnum, auto
+
 import httpx
 from fastapi import Depends, HTTPException, Request
-
-import os
+from fastapi_cache.decorator import cache
 
 
 class UserStatus(StrEnum):
