@@ -11,9 +11,6 @@ class UserStatus(StrEnum):
     isLoggedIn = auto()
 
 
-AUTH_SERVER_STATIC = "https://world.openfoodfacts.org"
-
-
 def get_auth_server(request: Request):
     """
     Get auth server URL from request
@@ -66,7 +63,6 @@ async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
     cache = FastAPICache.get_backend()
     cache_key = f"user-data:{session_cookie}"
 
-    # Try to get from cache first
     cached_data = await cache.get(cache_key)
     if cached_data:
         return cached_data
@@ -82,7 +78,6 @@ async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
 
     user = response.json().get("user", {})
 
-    # Only cache valid user data
     if user:
         await cache.set(cache_key, user, expire=3600)  # Cache for 1 hour
 
