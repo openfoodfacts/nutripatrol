@@ -90,7 +90,7 @@ init_sentry(settings.sentry_dns)
 
 @app.on_event("startup")
 async def startup():
-    FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+    FastAPICache.init(InMemoryBackend(), prefix="nutripatrol-cache")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -341,7 +341,7 @@ def create_flag(
 
 
 @api_v1_router.get("/flags")
-def get_flags(_=get_auth_dependency(UserStatus.isLoggedIn)):
+def get_flags(_=get_auth_dependency(UserStatus.isModerator)):
     """Get all flags.
 
     This function is used to get all flags.
@@ -351,7 +351,7 @@ def get_flags(_=get_auth_dependency(UserStatus.isLoggedIn)):
 
 
 @api_v1_router.get("/flags/{flag_id}")
-def get_flag(flag_id: int, _=get_auth_dependency(UserStatus.isLoggedIn)):
+def get_flag(flag_id: int, _=get_auth_dependency(UserStatus.isModerator)):
     """Get a flag by ID.
 
     This function is used to get a flag by its ID.
@@ -386,7 +386,7 @@ def get_tickets(
     reason: Annotated[list[ReasonType] | None, Query()] = None,
     page: int = 1,
     page_size: int = 10,
-    _=get_auth_dependency(UserStatus.isLoggedIn),
+    _=get_auth_dependency(UserStatus.isModerator),
 ):
     """Get all tickets.
 
@@ -425,7 +425,7 @@ def get_tickets(
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
-def get_ticket(ticket_id: int, _=get_auth_dependency(UserStatus.isLoggedIn)):
+def get_ticket(ticket_id: int, _=get_auth_dependency(UserStatus.isModerator)):
     """Get a ticket by ID.
 
     This function is used to get a ticket by its ID.
@@ -439,7 +439,7 @@ def get_ticket(ticket_id: int, _=get_auth_dependency(UserStatus.isLoggedIn)):
 
 @api_v1_router.post("/flags/batch")
 def get_flags_by_ticket_batch(
-    flag_request: FlagsByTicketIdRequest, _=get_auth_dependency(UserStatus.isLoggedIn)
+    flag_request: FlagsByTicketIdRequest, _=get_auth_dependency(UserStatus.isModerator)
 ):
     """Get all flags for tickets by IDs.
 

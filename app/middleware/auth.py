@@ -5,6 +5,8 @@ import httpx
 from fastapi import Depends, HTTPException, Request
 from fastapi_cache import FastAPICache
 
+import os
+
 
 class UserStatus(StrEnum):
     isModerator = auto()
@@ -20,8 +22,8 @@ def get_auth_server(request: Request):
     """
     # For dev purposes, we can use a static auth server with AUTH_SERVER_STATIC
     # which can be specified in local_settings.py
-    auth_server_static = globals().get("AUTH_SERVER_STATIC")
-    if auth_server_static:
+    auth_server_static = os.getenv("AUTH_SERVER_STATIC")
+    if auth_server_static and auth_server_static != "":
         return auth_server_static
     base_url = f"{request.base_url.scheme}://{request.base_url.netloc}"
     # remove folksonomy prefix and add AUTH prefix
@@ -73,6 +75,7 @@ async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
         )
 
     if response.status_code != 200:
+        # Protect against brute-force
         await asyncio.sleep(2)
         raise HTTPException(status_code=401, detail="Invalid session token")
 
