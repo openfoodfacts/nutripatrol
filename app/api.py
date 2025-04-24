@@ -281,7 +281,9 @@ class FlagsByTicketIdRequest(BaseModel):
 
 
 @api_v1_router.post("/flags")
-def create_flag(flag: FlagCreate, request: Request, _=get_auth_dependency(UserStatus.isLoggedIn)):
+def create_flag(
+    flag: FlagCreate, request: Request, _=get_auth_dependency(UserStatus.isLoggedIn)
+):
     """Create a flag for a product.
 
     This function is used to create a flag for a product or an image.
@@ -384,7 +386,7 @@ def get_tickets(
     reason: Annotated[list[ReasonType] | None, Query()] = None,
     page: int = 1,
     page_size: int = 10,
-    _=get_auth_dependency(UserStatus.isLoggedIn)
+    _=get_auth_dependency(UserStatus.isLoggedIn),
 ):
     """Get all tickets.
 
@@ -436,7 +438,9 @@ def get_ticket(ticket_id: int, _=get_auth_dependency(UserStatus.isLoggedIn)):
 
 
 @api_v1_router.post("/flags/batch")
-def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest, _=get_auth_dependency(UserStatus.isLoggedIn)):
+def get_flags_by_ticket_batch(
+    flag_request: FlagsByTicketIdRequest, _=get_auth_dependency(UserStatus.isLoggedIn)
+):
     """Get all flags for tickets by IDs.
 
     This function is used to get all flags for tickets by there IDs.
@@ -456,7 +460,9 @@ def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest, _=get_auth_d
 
 
 @api_v1_router.put("/tickets/{ticket_id}/status")
-def update_ticket_status(ticket_id: int, status: TicketStatus, _=get_auth_dependency(UserStatus.isModerator)):
+def update_ticket_status(
+    ticket_id: int, status: TicketStatus, _=get_auth_dependency(UserStatus.isModerator)
+):
     """Update the status of a ticket by ID.
 
     This function is used to update the status of a ticket by its ID.

@@ -34,6 +34,7 @@ def get_auth_server(request: Request):
 def get_auth_dependency(user_status: UserStatus):
     async def wrapper(request: Request):
         return await auth_dependency(request, user_status)
+
     return Depends(wrapper)
 
 
@@ -45,7 +46,9 @@ async def auth_dependency(request: Request, user_status: UserStatus):
         raise HTTPException(status_code=401, detail="Missing session token")
 
     if user_status not in UserStatus:
-        raise HTTPException(status_code=400, detail=f"Invalid user status : {user_status}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid user status : {user_status}"
+        )
 
     user_data = await get_user_data(session_cookie, auth_base_url)
 
@@ -69,9 +72,7 @@ async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
 
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            auth_base_url,
-            cookies={"session": session_cookie},
-            params={"body": "1"}
+            auth_base_url, cookies={"session": session_cookie}, params={"body": "1"}
         )
 
     if response.status_code != 200:
