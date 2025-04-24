@@ -478,15 +478,6 @@ def update_ticket_status(
             raise HTTPException(status_code=404, detail="Not found")
 
 
-@api_v1_router.get("/auth")
-async def auth(_=get_auth_dependency(UserStatus.isModerator)):
-    """Authentication endpoint.
-
-    This function is used to check if the user is authenticated.
-    """
-    return {"status": "ok"}
-
-
 @api_v1_router.get("/status")
 def status():
     """Health check endpoint."""
