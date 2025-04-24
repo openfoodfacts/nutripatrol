@@ -72,9 +72,10 @@ async def auth_dependency(request: Request, user_status: UserStatus):
 @cache(
     key_builder=generate_cache_key,
     namespace="user-data",
-    expire=60 * 60 * 24,
+    expire=60 * 60,
 )
 async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
+    print(session_cookie, auth_base_url)
     async with httpx.AsyncClient() as client:
         response = await client.get(
             auth_base_url, cookies={"session": session_cookie}, params={"body": "1"}
