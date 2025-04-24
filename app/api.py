@@ -493,7 +493,8 @@ def status():
     return {"status": "ok"}
 
 
-# Route only available in dev mode for setting up the session cookie by passing it into the body
+# Route only available in dev mode
+# This route is used to set the session cookie for the auth server
 class SessionBody(BaseModel):
     session: str
 
