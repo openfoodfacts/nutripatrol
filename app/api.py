@@ -9,6 +9,8 @@ from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from openfoodfacts import Flavor
 from openfoodfacts.images import generate_image_url
 from openfoodfacts.utils import URLBuilder, get_logger
@@ -84,6 +86,11 @@ app.add_middleware(
 api_v1_router = APIRouter(prefix="/api/v1")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 init_sentry(settings.sentry_dns)
+
+
+@app.on_event("startup")
+async def startup():
+    FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -331,8 +338,8 @@ def create_flag(flag: FlagCreate, request: Request, _=get_auth_dependency(UserSt
         )
 
 
-@api_v1_router.get("/flags", _=get_auth_dependency(UserStatus.isLoggedIn))
-def get_flags():
+@api_v1_router.get("/flags")
+def get_flags(_=get_auth_dependency(UserStatus.isLoggedIn)):
     """Get all flags.
 
     This function is used to get all flags.
@@ -341,8 +348,8 @@ def get_flags():
         return {"flags": list(FlagModel.select().dicts().iterator())}
 
 
-@api_v1_router.get("/flags/{flag_id}", _=get_auth_dependency(UserStatus.isLoggedIn))
-def get_flag(flag_id: int):
+@api_v1_router.get("/flags/{flag_id}")
+def get_flag(flag_id: int, _=get_auth_dependency(UserStatus.isLoggedIn)):
     """Get a flag by ID.
 
     This function is used to get a flag by its ID.
@@ -448,8 +455,8 @@ def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest, _=get_auth_d
     return {"ticket_id_to_flags": dict(ticket_id_to_flags)}
 
 
-@api_v1_router.put("/tickets/{ticket_id}/status", _=get_auth_dependency(UserStatus.isModerator))
-def update_ticket_status(ticket_id: int, status: TicketStatus):
+@api_v1_router.put("/tickets/{ticket_id}/status")
+def update_ticket_status(ticket_id: int, status: TicketStatus, _=get_auth_dependency(UserStatus.isModerator)):
     """Update the status of a ticket by ID.
 
     This function is used to update the status of a ticket by its ID.

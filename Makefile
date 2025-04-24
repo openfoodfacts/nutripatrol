@@ -38,7 +38,7 @@ livecheck:
 
 build:
 	@echo "🥫 building docker (for dev)"
-	docker-compose build
+	docker compose build
 
 
 # pull images from image repository

@@ -10,3 +10,4 @@ peewee-migrate==1.12.2
 psycopg2-binary==2.9.9
 typer==0.9.0
 httpx==0.28.1
+fastapi-cache2==0.2.0

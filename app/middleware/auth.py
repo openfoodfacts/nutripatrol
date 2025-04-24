@@ -1,12 +1,16 @@
 from fastapi import Depends, Request, HTTPException
 from fastapi_cache import FastAPICache
 import httpx
+import asyncio
 from enum import StrEnum, auto
 
 
 class UserStatus(StrEnum):
     isModerator = auto()
     isLoggedIn = auto()
+
+
+AUTH_SERVER_STATIC = "https://world.openfoodfacts.org"
 
 
 def get_auth_server(request: Request):
@@ -71,12 +75,13 @@ async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
         )
 
     if response.status_code != 200:
+        await asyncio.sleep(2)
         raise HTTPException(status_code=401, detail="Invalid session token")
 
     user = response.json().get("user", {})
 
     # Only cache valid user data
     if user:
-        await cache.set(cache_key, user, expire=300)  # Cache for 5 min
+        await cache.set(cache_key, user, expire=3600)  # Cache for 1 hour
 
     return user
