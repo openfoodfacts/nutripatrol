@@ -495,6 +495,13 @@ if auth_server_static and auth_server_static != "":
 
     @api_v1_router.post("/set_session_cookie")
     def set_session_cookie(request: Request, body: SessionBody):
+        """Set the session cookie for the auth server.
+        This route is only available in dev mode.
+        To use it, set the AUTH_SERVER_STATIC
+        environment variable to the auth server URL.
+        Connect to the auth server and copy the session cookie.
+        Then, call this endpoint with the session cookie in the body.
+        """
         response = PlainTextResponse("Session cookie set")
         response.set_cookie(key="session", value=body.session)
         return response
