@@ -467,10 +467,12 @@ def get_data(n_days: int = 31):
     """Get number of tickets by status for the last n days.
 
     Args:
-        n_days (int): The number of days from which to fetch ticket data. Default is 7 days.
+        n_days (int): The number of days from which to fetch ticket data.
+        Default is 7 days.
 
     Returns:
-        dict: A dictionary containing the number of tickets for each status (e.g., 'open', 'closed').
+        dict: A dictionary containing the number of tickets for each status
+        (e.g., 'open', 'closed').
     """
     with db:
         # Return the total number of tickets
@@ -480,22 +482,25 @@ def get_data(n_days: int = 31):
         start_date = datetime.utcnow() - timedelta(days=n_days)
         # Query for getting the count of tickets by status in the last n days
         tickets = (
-            TicketModel
-            .select(TicketModel.status, fn.COUNT(TicketModel.id).alias('count'))
+            TicketModel.select(
+                TicketModel.status, fn.COUNT(TicketModel.id).alias("count")
+            )
             .where(TicketModel.created_at >= start_date)
             .group_by(TicketModel.status)
         )
         # Idem group by flavor
         tickets_by_flavor = (
-            TicketModel
-            .select(TicketModel.flavor, fn.COUNT(TicketModel.id).alias('count'))
+            TicketModel.select(
+                TicketModel.flavor, fn.COUNT(TicketModel.id).alias("count")
+            )
             .where(TicketModel.created_at >= start_date)
             .group_by(TicketModel.flavor)
         )
         # Idem group by type
         tickets_by_type = (
-            TicketModel
-            .select(TicketModel.type, fn.COUNT(TicketModel.id).alias('count'))
+            TicketModel.select(
+                TicketModel.type, fn.COUNT(TicketModel.id).alias("count")
+            )
             .where(TicketModel.created_at >= start_date)
             .group_by(TicketModel.type)
         )
@@ -504,7 +509,9 @@ def get_data(n_days: int = 31):
     result = {
         "total_tickets": total_tickets,
         "tickets_by_status": {ticket.status: ticket.count for ticket in tickets},
-        "tickets_by_flavor": {ticket.flavor: ticket.count for ticket in tickets_by_flavor},
+        "tickets_by_flavor": {
+            ticket.flavor: ticket.count for ticket in tickets_by_flavor
+        },
         "tickets_by_type": {ticket.type: ticket.count for ticket in tickets_by_type},
         "n_days": n_days,
         "start_date": start_date.isoformat(),
