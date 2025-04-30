@@ -485,11 +485,27 @@ def get_data(n_days: int = 31):
             .where(TicketModel.created_at >= start_date)
             .group_by(TicketModel.status)
         )
+        # Idem group by flavor
+        tickets_by_flavor = (
+            TicketModel
+            .select(TicketModel.flavor, fn.COUNT(TicketModel.id).alias('count'))
+            .where(TicketModel.created_at >= start_date)
+            .group_by(TicketModel.flavor)
+        )
+        # Idem group by type
+        tickets_by_type = (
+            TicketModel
+            .select(TicketModel.type, fn.COUNT(TicketModel.id).alias('count'))
+            .where(TicketModel.created_at >= start_date)
+            .group_by(TicketModel.type)
+        )
 
     # Prepare the results
     result = {
         "total_tickets": total_tickets,
-        "tickets": {ticket.status: ticket.count for ticket in tickets},
+        "tickets_by_status": {ticket.status: ticket.count for ticket in tickets},
+        "tickets_by_flavor": {ticket.flavor: ticket.count for ticket in tickets_by_flavor},
+        "tickets_by_type": {ticket.type: ticket.count for ticket in tickets_by_type},
         "n_days": n_days,
         "start_date": start_date.isoformat(),
         "end_date": datetime.utcnow().isoformat(),
