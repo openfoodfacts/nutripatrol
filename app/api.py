@@ -1,7 +1,7 @@
 import hashlib
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum, auto
 from pathlib import Path
 from typing import Annotated, Any
@@ -15,7 +15,7 @@ from fastapi_cache.backends.inmemory import InMemoryBackend
 from openfoodfacts import Flavor
 from openfoodfacts.images import generate_image_url
 from openfoodfacts.utils import URLBuilder, get_logger
-from peewee import DoesNotExist
+from peewee import DoesNotExist, fn
 from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, Field, model_validator
 
@@ -476,6 +476,65 @@ def update_ticket_status(
             return model_to_dict(ticket)
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Not found")
+
+
+@api_v1_router.get("/get-data")
+def get_data(n_days: int = 31):
+    """Get number of tickets by status for the last n days.
+
+    Args:
+        n_days (int): The number of days from which to fetch ticket data.
+        Default is 7 days.
+
+    Returns:
+        dict: A dictionary containing the number of tickets for each status
+        (e.g., 'open', 'closed').
+    """
+    with db:
+        # Return the total number of tickets
+        total_tickets = TicketModel.select().count()
+
+        # Get the total number of tickets created in the last n days
+        start_date = datetime.utcnow() - timedelta(days=n_days)
+        # Query for getting the count of tickets by status in the last n days
+        tickets = (
+            TicketModel.select(
+                TicketModel.status, fn.COUNT(TicketModel.id).alias("count")
+            )
+            .where(TicketModel.created_at >= start_date)
+            .group_by(TicketModel.status)
+        )
+        # Idem group by flavor
+        tickets_by_flavor = (
+            TicketModel.select(
+                TicketModel.flavor, fn.COUNT(TicketModel.id).alias("count")
+            )
+            .where(TicketModel.created_at >= start_date)
+            .group_by(TicketModel.flavor)
+        )
+        # Idem group by type
+        tickets_by_type = (
+            TicketModel.select(
+                TicketModel.type, fn.COUNT(TicketModel.id).alias("count")
+            )
+            .where(TicketModel.created_at >= start_date)
+            .group_by(TicketModel.type)
+        )
+
+    # Prepare the results
+    result = {
+        "total_tickets": total_tickets,
+        "tickets_by_status": {ticket.status: ticket.count for ticket in tickets},
+        "tickets_by_flavor": {
+            ticket.flavor: ticket.count for ticket in tickets_by_flavor
+        },
+        "tickets_by_type": {ticket.type: ticket.count for ticket in tickets_by_type},
+        "n_days": n_days,
+        "start_date": start_date.isoformat(),
+        "end_date": datetime.utcnow().isoformat(),
+    }
+
+    return result
 
 
 @api_v1_router.get("/status")
