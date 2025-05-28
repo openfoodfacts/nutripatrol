@@ -2,9 +2,10 @@ import asyncio
 import hashlib
 import os
 from enum import StrEnum, auto
+from urllib.parse import urlparse, urlunparse
 
 import httpx
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 from fastapi_cache.decorator import cache
 
 
@@ -31,19 +32,35 @@ def get_auth_server(request: Request):
     """
     # For dev purposes, we can use a static auth server with AUTH_SERVER_STATIC
     auth_server_static = os.getenv("AUTH_SERVER_STATIC")
-    if auth_server_static and auth_server_static != "":
+    if auth_server_static:
         return auth_server_static
-    base_url = f"{request.base_url.scheme}://{request.base_url.netloc}"
-    # remove nutripatrol prefix and add AUTH prefix
-    base_url = base_url.replace("nutripatrol" or "", "world" or "")
+    url = str(request.base_url)  # e.g. 'https://nutripatrol.openfoodfacts.net/'
+    parsed_url = urlparse(url)
+
+    # Replace the subdomain 'nutripatrol' with 'world' in the netloc
+    new_netloc = parsed_url.netloc.replace("nutripatrol", "world")
+
+    # Rebuild the URL with the new netloc and original scheme
+    base_url = urlunparse(
+        (
+            parsed_url.scheme,  # keep the original scheme (http or https)
+            new_netloc,
+        )
+    )
+
     return base_url
+
+
+# Usage example:
+# auth_url = get_auth_base_url(request)
+# auth_url would be something like 'https://world.openfoodfacts.net/'
 
 
 def get_auth_dependency(user_status: UserStatus):
     async def wrapper(request: Request):
         return await auth_dependency(request, user_status)
 
-    return Depends(wrapper)
+    return wrapper
 
 
 async def auth_dependency(request: Request, user_status: UserStatus):
@@ -69,20 +86,24 @@ async def auth_dependency(request: Request, user_status: UserStatus):
             raise HTTPException(status_code=403, detail="User is not logged in")
 
 
-@cache(
-    key_builder=generate_cache_key,
-    namespace="user-data",
-    expire=60 * 60,
-)
 async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
-    print(session_cookie, auth_base_url)
+    if not session_cookie:
+        return await _fetch_user_data(session_cookie, auth_base_url)
+    return await _get_user_data_cached(session_cookie, auth_base_url)
+
+
+@cache(key_builder=generate_cache_key, namespace="user-data", expire=60 * 60)
+async def _get_user_data_cached(session_cookie: str, auth_base_url: str) -> dict:
+    return await _fetch_user_data(session_cookie, auth_base_url)
+
+
+async def _fetch_user_data(session_cookie: str, auth_base_url: str) -> dict:
     async with httpx.AsyncClient() as client:
         response = await client.get(
             auth_base_url, cookies={"session": session_cookie}, params={"body": "1"}
         )
 
     if response.status_code != 200:
-        # Protect against brute-force
         await asyncio.sleep(2)
         raise HTTPException(status_code=401, detail="Invalid session token")
 
