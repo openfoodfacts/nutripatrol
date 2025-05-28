@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import os
 from enum import StrEnum, auto
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from fastapi import HTTPException, Request
@@ -33,10 +34,26 @@ def get_auth_server(request: Request):
     auth_server_static = os.getenv("AUTH_SERVER_STATIC")
     if auth_server_static and auth_server_static != "":
         return auth_server_static
-    base_url = f"{request.base_url.scheme}://{request.base_url.netloc}"
-    # remove nutripatrol prefix and add AUTH prefix
-    base_url = base_url.replace("nutripatrol" or "", "world" or "")
+
+
+def get_auth_base_url(request):
+    url = str(request.base_url)  # e.g. 'https://nutripatrol.openfoodfacts.net/'
+    parsed_url = urlparse(url)
+
+    # Replace the subdomain 'nutripatrol' with 'world' in the netloc
+    new_netloc = parsed_url.netloc.replace('nutripatrol', 'world')
+
+    # Rebuild the URL with the new netloc and original scheme
+    base_url = urlunparse((
+        parsed_url.scheme,  # keep the original scheme (http or https)
+        new_netloc,
+    ))
+
     return base_url
+
+# Usage example:
+# auth_url = get_auth_base_url(request)
+# auth_url would be something like 'https://world.openfoodfacts.net/'
 
 
 def get_auth_dependency(user_status: UserStatus):
