@@ -38,15 +38,18 @@ def get_auth_server(request: Request):
     parsed_url = urlparse(url)
 
     # Replace the subdomain 'nutripatrol' with 'world' in the netloc
-    new_netloc = parsed_url.netloc.replace('nutripatrol', 'world')
+    new_netloc = parsed_url.netloc.replace("nutripatrol", "world")
 
     # Rebuild the URL with the new netloc and original scheme
-    base_url = urlunparse((
-        parsed_url.scheme,  # keep the original scheme (http or https)
-        new_netloc,
-    ))
+    base_url = urlunparse(
+        (
+            parsed_url.scheme,  # keep the original scheme (http or https)
+            new_netloc,
+        )
+    )
 
     return base_url
+
 
 # Usage example:
 # auth_url = get_auth_base_url(request)

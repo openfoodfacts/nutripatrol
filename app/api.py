@@ -283,7 +283,9 @@ class FlagsByTicketIdRequest(BaseModel):
 
 @api_v1_router.post("/flags")
 def create_flag(
-    flag: FlagCreate, request: Request, _: Any = Depends(get_auth_dependency(UserStatus.isLoggedIn)),
+    flag: FlagCreate,
+    request: Request,
+    _: Any = Depends(get_auth_dependency(UserStatus.isLoggedIn)),
 ):
     """Create a flag for a product.
 
@@ -352,7 +354,9 @@ def get_flags(_: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
 
 
 @api_v1_router.get("/flags/{flag_id}")
-def get_flag(flag_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
+def get_flag(
+    flag_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+):
     """Get a flag by ID.
 
     This function is used to get a flag by its ID.
@@ -421,8 +425,7 @@ def get_tickets(
             return {"tickets": [], "max_page": max_page}
 
         tickets = (
-            base_query
-            .order_by(TicketModel.created_at.desc())
+            base_query.order_by(TicketModel.created_at.desc())
             .offset(offset)
             .limit(page_size)
             .dicts()
@@ -435,7 +438,9 @@ def get_tickets(
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
-def get_ticket(ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
+def get_ticket(
+    ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+):
     """Get a ticket by ID.
 
     This function is used to get a ticket by its ID.
@@ -449,7 +454,8 @@ def get_ticket(ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.i
 
 @api_v1_router.post("/flags/batch")
 def get_flags_by_ticket_batch(
-    flag_request: FlagsByTicketIdRequest, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+    flag_request: FlagsByTicketIdRequest,
+    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
 ):
     """Get all flags for tickets by IDs.
 
@@ -471,7 +477,9 @@ def get_flags_by_ticket_batch(
 
 @api_v1_router.put("/tickets/{ticket_id}/status")
 def update_ticket_status(
-    ticket_id: int, status: TicketStatus, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+    ticket_id: int,
+    status: TicketStatus,
+    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
 ):
     """Update the status of a ticket by ID.
 
