@@ -33,8 +33,11 @@ def get_auth_server(request: Request):
     # For dev purposes, we can use a static auth server with AUTH_SERVER_STATIC
     auth_server_static = os.getenv("AUTH_SERVER_STATIC")
     if auth_server_static:
+        print(f"Using static auth server: {auth_server_static}")
         return auth_server_static
     url = str(request.base_url)  # e.g. 'https://nutripatrol.openfoodfacts.net/'
+    print(f"Using as auth server: {url}")
+    print(f"request headers: {request.headers}")
     parsed_url = urlparse(url)
 
     # Replace the subdomain 'nutripatrol' with 'world' in the netloc
