@@ -33,11 +33,8 @@ def get_auth_server(request: Request):
     # For dev purposes, we can use a static auth server with AUTH_SERVER_STATIC
     auth_server_static = os.getenv("AUTH_SERVER_STATIC")
     if auth_server_static:
-        print(f"Using static auth server: {auth_server_static}")
         return auth_server_static
     url = str(request.base_url)  # e.g. 'https://nutripatrol.openfoodfacts.net/'
-    print(f"Using as auth server: {url}")
-    print(f"request headers: {request.headers}")
     parsed_url = urlparse(url)
 
     # Replace the subdomain 'nutripatrol' with 'world' in the netloc
@@ -46,7 +43,11 @@ def get_auth_server(request: Request):
     # Rebuild the URL with the new netloc and original scheme
     base_url = urlunparse(
         (
-            parsed_url.scheme,  # keep the original scheme (http or https)
+            # It seems that Starlette ignores the scheme provided
+            # by the request headers if the reverse proxy IP address is not in
+            # the trusted proxies list.
+            # So we force it to be https, as we never want to use http here.
+            "https",
             new_netloc,
             "",                 # path
             "",                 # params
