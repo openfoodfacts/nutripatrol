@@ -49,10 +49,10 @@ def get_auth_server(request: Request):
             # So we force it to be https, as we never want to use http here.
             "https",
             new_netloc,
-            "",                 # path
-            "",                 # params
-            "",                 # query
-            "",                 # fragment
+            "",  # path
+            "",  # params
+            "",  # query
+            "",  # fragment
         )
     )
 
