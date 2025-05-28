@@ -45,6 +45,10 @@ def get_auth_server(request: Request):
         (
             parsed_url.scheme,  # keep the original scheme (http or https)
             new_netloc,
+            "",                 # path
+            "",                 # params
+            "",                 # query
+            "",                 # fragment
         )
     )
 
