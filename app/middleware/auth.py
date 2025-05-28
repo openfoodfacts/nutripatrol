@@ -32,11 +32,8 @@ def get_auth_server(request: Request):
     """
     # For dev purposes, we can use a static auth server with AUTH_SERVER_STATIC
     auth_server_static = os.getenv("AUTH_SERVER_STATIC")
-    if auth_server_static and auth_server_static != "":
+    if auth_server_static:
         return auth_server_static
-
-
-def get_auth_base_url(request):
     url = str(request.base_url)  # e.g. 'https://nutripatrol.openfoodfacts.net/'
     parsed_url = urlparse(url)
 
@@ -65,6 +62,7 @@ def get_auth_dependency(user_status: UserStatus):
 
 async def auth_dependency(request: Request, user_status: UserStatus):
     session_cookie = request.cookies.get("session")
+    print(f"Session cookie: {session_cookie}")
     auth_base_url = get_auth_server(request) + "/cgi/auth.pl"
 
     if not session_cookie:
@@ -76,6 +74,7 @@ async def auth_dependency(request: Request, user_status: UserStatus):
         )
 
     user_data = await get_user_data(session_cookie, auth_base_url)
+    print(f"User data: {user_data}")
 
     if user_status == UserStatus.isModerator:
         if user_data.get("moderator") != 1:
@@ -86,19 +85,24 @@ async def auth_dependency(request: Request, user_status: UserStatus):
             raise HTTPException(status_code=403, detail="User is not logged in")
 
 
-@cache(
-    key_builder=generate_cache_key,
-    namespace="user-data",
-    expire=60 * 60,
-)
 async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
+    if not session_cookie:
+        return await _fetch_user_data(session_cookie, auth_base_url)
+    return await _get_user_data_cached(session_cookie, auth_base_url)
+
+
+@cache(key_builder=generate_cache_key, namespace="user-data", expire=60 * 60)
+async def _get_user_data_cached(session_cookie: str, auth_base_url: str) -> dict:
+    return await _fetch_user_data(session_cookie, auth_base_url)
+
+
+async def _fetch_user_data(session_cookie: str, auth_base_url: str) -> dict:
     async with httpx.AsyncClient() as client:
         response = await client.get(
             auth_base_url, cookies={"session": session_cookie}, params={"body": "1"}
         )
 
     if response.status_code != 200:
-        # Protect against brute-force
         await asyncio.sleep(2)
         raise HTTPException(status_code=401, detail="Invalid session token")
 
