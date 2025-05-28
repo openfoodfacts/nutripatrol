@@ -65,7 +65,6 @@ def get_auth_dependency(user_status: UserStatus):
 
 async def auth_dependency(request: Request, user_status: UserStatus):
     session_cookie = request.cookies.get("session")
-    print(f"Session cookie: {session_cookie}")
     auth_base_url = get_auth_server(request) + "/cgi/auth.pl"
 
     if not session_cookie:
@@ -77,7 +76,6 @@ async def auth_dependency(request: Request, user_status: UserStatus):
         )
 
     user_data = await get_user_data(session_cookie, auth_base_url)
-    print(f"User data: {user_data}")
 
     if user_status == UserStatus.isModerator:
         if user_data.get("moderator") != 1:
