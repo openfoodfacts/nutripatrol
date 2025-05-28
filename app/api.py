@@ -6,7 +6,7 @@ from enum import StrEnum, auto
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -283,7 +283,7 @@ class FlagsByTicketIdRequest(BaseModel):
 
 @api_v1_router.post("/flags")
 def create_flag(
-    flag: FlagCreate, request: Request, _=get_auth_dependency(UserStatus.isLoggedIn)
+    flag: FlagCreate, request: Request, _: Any = Depends(get_auth_dependency(UserStatus.isLoggedIn)),
 ):
     """Create a flag for a product.
 
@@ -342,7 +342,7 @@ def create_flag(
 
 
 @api_v1_router.get("/flags")
-def get_flags(_=get_auth_dependency(UserStatus.isModerator)):
+def get_flags(_: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
     """Get all flags.
 
     This function is used to get all flags.
@@ -352,7 +352,7 @@ def get_flags(_=get_auth_dependency(UserStatus.isModerator)):
 
 
 @api_v1_router.get("/flags/{flag_id}")
-def get_flag(flag_id: int, _=get_auth_dependency(UserStatus.isModerator)):
+def get_flag(flag_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
     """Get a flag by ID.
 
     This function is used to get a flag by its ID.
@@ -387,16 +387,13 @@ def get_tickets(
     reason: Annotated[list[ReasonType] | None, Query()] = None,
     page: int = 1,
     page_size: int = 10,
-    _=get_auth_dependency(UserStatus.isModerator),
+    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
 ):
-    """Get all tickets.
-
-    This function is used to get all tickets with status open.
-    """
+    """Get all tickets, optionally filtered by status, type, and reason."""
     with db:
         offset = (page - 1) * page_size
-        # Get IDs of flags with the specified filters
         where_clause = []
+
         if status:
             where_clause.append(TicketModel.status == status)
         if type_:
@@ -407,26 +404,38 @@ def get_tickets(
             )
             where_clause.append(TicketModel.id.in_(subquery))
 
-        # Get the total number of tickets with the specified filters
-        count = TicketModel.select().where(*where_clause).count()
-        max_page = count // page_size + int(count % page_size != 0)
-        if page > max_page:
+        # Base query
+        base_query = TicketModel.select()
+        if where_clause:
+            base_query = base_query.where(*where_clause)
+
+        # Count query
+        count_query = TicketModel.select()
+        if where_clause:
+            count_query = count_query.where(*where_clause)
+
+        count = count_query.count()
+        max_page = (count + page_size - 1) // page_size  # ceiling division
+
+        if page > max_page and max_page > 0:
             return {"tickets": [], "max_page": max_page}
+
+        tickets = (
+            base_query
+            .order_by(TicketModel.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
+            .dicts()
+        )
+
         return {
-            "tickets": list(
-                TicketModel.select()
-                .where(*where_clause)
-                .order_by(TicketModel.created_at.desc())
-                .offset(offset)
-                .limit(page_size)
-                .dicts()
-            ),
+            "tickets": list(tickets),
             "max_page": max_page,
         }
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
-def get_ticket(ticket_id: int, _=get_auth_dependency(UserStatus.isModerator)):
+def get_ticket(ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
     """Get a ticket by ID.
 
     This function is used to get a ticket by its ID.
@@ -440,7 +449,7 @@ def get_ticket(ticket_id: int, _=get_auth_dependency(UserStatus.isModerator)):
 
 @api_v1_router.post("/flags/batch")
 def get_flags_by_ticket_batch(
-    flag_request: FlagsByTicketIdRequest, _=get_auth_dependency(UserStatus.isModerator)
+    flag_request: FlagsByTicketIdRequest, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
 ):
     """Get all flags for tickets by IDs.
 
@@ -462,7 +471,7 @@ def get_flags_by_ticket_batch(
 
 @api_v1_router.put("/tickets/{ticket_id}/status")
 def update_ticket_status(
-    ticket_id: int, status: TicketStatus, _=get_auth_dependency(UserStatus.isModerator)
+    ticket_id: int, status: TicketStatus, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
 ):
     """Update the status of a ticket by ID.
 
