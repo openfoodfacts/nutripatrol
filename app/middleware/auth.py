@@ -43,7 +43,7 @@ def get_auth_server(request: Request):
     # Rebuild the URL with the new netloc and original scheme
     base_url = urlunparse(
         (
-            parsed_url.scheme,  # keep the original scheme (http or https)
+            "https",  # Use 'https' scheme, as auth server is always secure
             new_netloc,
         )
     )
