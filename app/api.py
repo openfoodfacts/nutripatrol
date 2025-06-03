@@ -373,17 +373,6 @@ def _create_ticket(ticket: TicketCreate):
     return TicketModel.create(**ticket.model_dump())
 
 
-@api_v1_router.post("/tickets")
-def create_ticket(ticket: TicketCreate) -> Ticket:
-    """Create a ticket.
-
-    This function is used to create a ticket for a product or an image.
-    A ticket is a request for a product or an image to be reviewed.
-    """
-    with db:
-        return _create_ticket(ticket)
-
-
 @api_v1_router.get("/tickets")
 def get_tickets(
     status: TicketStatus | None = None,
