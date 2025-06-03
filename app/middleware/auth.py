@@ -75,7 +75,7 @@ async def auth_dependency(request: Request, user_status: UserStatus):
             status_code=400, detail=f"Invalid user status : {user_status}"
         )
 
-    user_data = await get_user_data(session_cookie, auth_base_url)
+    user_data = await _get_user_data_cached(session_cookie, auth_base_url)
 
     if user_status == UserStatus.isModerator:
         if user_data.get("moderator") != 1:
@@ -84,12 +84,6 @@ async def auth_dependency(request: Request, user_status: UserStatus):
     elif user_status == UserStatus.isLoggedIn:
         if user_data.get("moderator") is None:
             raise HTTPException(status_code=403, detail="User is not logged in")
-
-
-async def get_user_data(session_cookie: str, auth_base_url: str) -> dict:
-    if not session_cookie:
-        return await _fetch_user_data(session_cookie, auth_base_url)
-    return await _get_user_data_cached(session_cookie, auth_base_url)
 
 
 @cache(key_builder=generate_cache_key, namespace="user-data", expire=60 * 60)
