@@ -477,7 +477,7 @@ def update_ticket_status(
 
 
 @api_v1_router.get("/stats")
-def getStats(
+def get_stats(
     n_days: int = 31,
     _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
 ) -> dict:
