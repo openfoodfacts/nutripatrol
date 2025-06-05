@@ -125,6 +125,7 @@ jobs:
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
           # Expose PostgreSQL locally on port 5434
           echo "POSTGRES_EXPOSE=127.0.0.1:5434" >> .env
+          echo "AUTH_BEARER_TOKEN_ROBOTOFF=${{ secrets.AUTH_BEARER_TOKEN_ROBOTOFF }}" >> .env
 
     - name: Create Docker volumes
       uses: appleboy/ssh-action@master
