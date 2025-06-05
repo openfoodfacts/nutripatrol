@@ -492,7 +492,7 @@ def get_data(
         tickets by status, tickets by flavor, and tickets by type.
         The keys are:
             - total_tickets: Total number of tickets.
-            - tickets_by_status: A dictionary with ticket status as keys    
+            - tickets_by_status: A dictionary with ticket status as keys
                 and the count of tickets as values.
             - tickets_by_flavor: A dictionary with ticket flavor as keys
                 and the count of tickets as values.
