@@ -488,8 +488,19 @@ def get_data(
         Default is 31 days.
 
     Returns:
-        dict: A dictionary containing the number of tickets for each status
-        (e.g., 'open', 'closed').
+        dict: A dictionary containing the total number of tickets,
+        tickets by status, tickets by flavor, and tickets by type.
+        The keys are:
+            - total_tickets: Total number of tickets.
+            - tickets_by_status: A dictionary with ticket status as keys    
+                and the count of tickets as values.
+            - tickets_by_flavor: A dictionary with ticket flavor as keys
+                and the count of tickets as values.
+            - tickets_by_type: A dictionary with ticket type as keys
+                and the count of tickets as values.
+            - n_days: The number of days for which the data is fetched.
+            - start_date: The start date of the data range in ISO format.
+            - end_date: The end date of the data range in ISO format.
     """
     with db:
         # Return the total number of tickets
