@@ -1,14 +1,17 @@
 import hashlib
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta
 from enum import StrEnum, auto
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from openfoodfacts import Flavor
 from openfoodfacts.images import generate_image_url
 from openfoodfacts.utils import URLBuilder, get_logger
@@ -17,6 +20,7 @@ from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, Field, model_validator
 
 from app.config import settings
+from app.middleware.auth import UserStatus, get_auth_dependency
 from app.models import FlagModel, TicketModel, db
 from app.utils import init_sentry
 
@@ -83,6 +87,11 @@ app.add_middleware(
 api_v1_router = APIRouter(prefix="/api/v1")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 init_sentry(settings.sentry_dns)
+
+
+@app.on_event("startup")
+async def startup():
+    FastAPICache.init(InMemoryBackend(), prefix="nutripatrol-cache")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -273,7 +282,11 @@ class FlagsByTicketIdRequest(BaseModel):
 
 
 @api_v1_router.post("/flags")
-def create_flag(flag: FlagCreate, request: Request):
+def create_flag(
+    flag: FlagCreate,
+    request: Request,
+    _: Any = Depends(get_auth_dependency(UserStatus.isLoggedIn)),
+):
     """Create a flag for a product.
 
     This function is used to create a flag for a product or an image.
@@ -331,7 +344,7 @@ def create_flag(flag: FlagCreate, request: Request):
 
 
 @api_v1_router.get("/flags")
-def get_flags():
+def get_flags(_: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
     """Get all flags.
 
     This function is used to get all flags.
@@ -341,7 +354,9 @@ def get_flags():
 
 
 @api_v1_router.get("/flags/{flag_id}")
-def get_flag(flag_id: int):
+def get_flag(
+    flag_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+):
     """Get a flag by ID.
 
     This function is used to get a flag by its ID.
@@ -358,17 +373,6 @@ def _create_ticket(ticket: TicketCreate):
     return TicketModel.create(**ticket.model_dump())
 
 
-@api_v1_router.post("/tickets")
-def create_ticket(ticket: TicketCreate) -> Ticket:
-    """Create a ticket.
-
-    This function is used to create a ticket for a product or an image.
-    A ticket is a request for a product or an image to be reviewed.
-    """
-    with db:
-        return _create_ticket(ticket)
-
-
 @api_v1_router.get("/tickets")
 def get_tickets(
     status: TicketStatus | None = None,
@@ -376,6 +380,7 @@ def get_tickets(
     reason: Annotated[list[ReasonType] | None, Query()] = None,
     page: int = 1,
     page_size: int = 10,
+    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
 ):
     """Get all tickets.
 
@@ -414,7 +419,9 @@ def get_tickets(
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
-def get_ticket(ticket_id: int):
+def get_ticket(
+    ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+):
     """Get a ticket by ID.
 
     This function is used to get a ticket by its ID.
@@ -427,7 +434,10 @@ def get_ticket(ticket_id: int):
 
 
 @api_v1_router.post("/flags/batch")
-def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest):
+def get_flags_by_ticket_batch(
+    flag_request: FlagsByTicketIdRequest,
+    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+):
     """Get all flags for tickets by IDs.
 
     This function is used to get all flags for tickets by there IDs.
@@ -447,7 +457,11 @@ def get_flags_by_ticket_batch(flag_request: FlagsByTicketIdRequest):
 
 
 @api_v1_router.put("/tickets/{ticket_id}/status")
-def update_ticket_status(ticket_id: int, status: TicketStatus):
+def update_ticket_status(
+    ticket_id: int,
+    status: TicketStatus,
+    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+):
     """Update the status of a ticket by ID.
 
     This function is used to update the status of a ticket by its ID.
@@ -525,6 +539,29 @@ def get_data(n_days: int = 31):
 def status():
     """Health check endpoint."""
     return {"status": "ok"}
+
+
+# Route only available in dev mode
+# This route is used to set the session cookie for the auth server
+class SessionBody(BaseModel):
+    session: str
+
+
+auth_server_static = os.getenv("AUTH_SERVER_STATIC")
+if auth_server_static and auth_server_static != "":
+
+    @api_v1_router.post("/set_session_cookie")
+    def set_session_cookie(request: Request, body: SessionBody):
+        """Set the session cookie for the auth server.
+        This route is only available in dev mode.
+        To use it, set the AUTH_SERVER_STATIC
+        environment variable to the auth server URL.
+        Connect to the auth server and copy the session cookie.
+        Then, call this endpoint with the session cookie in the body.
+        """
+        response = PlainTextResponse("Session cookie set")
+        response.set_cookie(key="session", value=body.session)
+        return response
 
 
 app.include_router(api_v1_router)

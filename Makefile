@@ -11,7 +11,7 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 # we need COMPOSE_PROJECT_NAME for some commands
 # take it form env, or from env file
 COMPOSE_PROJECT_NAME ?= $(shell grep COMPOSE_PROJECT_NAME ${ENV_FILE} | cut -d '=' -f 2)
-DOCKER_COMPOSE=docker-compose --env-file=${ENV_FILE}
+DOCKER_COMPOSE=docker compose --env-file=${ENV_FILE}
 
 #------------#
 # Production #
@@ -38,7 +38,7 @@ livecheck:
 
 build:
 	@echo "🥫 building docker (for dev)"
-	docker-compose build
+	docker compose build
 
 
 # pull images from image repository
