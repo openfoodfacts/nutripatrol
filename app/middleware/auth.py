@@ -64,6 +64,22 @@ def get_auth_dependency(user_status: UserStatus):
 
 
 async def auth_dependency(request: Request, user_status: UserStatus):
+    # Check for bearer token in Authorization header
+    # Currently, this is only for robotoff
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        # Check if hashed token matches the env variable
+        token = auth_header.split(" ")[1]
+        hashed_token = hashlib.sha256(token.encode()).hexdigest()
+        hashed_env_token = hashlib.sha256(
+            os.getenv("AUTH_BEARER_TOKEN_ROBOTOFF").encode()
+        ).hexdigest()
+        if hashed_token != hashed_env_token:
+            raise HTTPException(status_code=403, detail="Invalid bearer token")
+        return  # If the token is valid, we just return
+
+    # If no bearer token is provided, we check for session cookie
+    # Check for session cookie
     session_cookie = request.cookies.get("session")
     auth_base_url = get_auth_server(request) + "/cgi/auth.pl"
 
