@@ -1,7 +1,7 @@
 import hashlib
 import os
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum, auto
 from pathlib import Path
 from typing import Annotated, Any
@@ -476,13 +476,16 @@ def update_ticket_status(
             raise HTTPException(status_code=404, detail="Not found")
 
 
-@api_v1_router.get("/get-data")
-def get_data(n_days: int = 31):
+@api_v1_router.get("/stats")
+def get_data(
+    n_days: int = 31,
+    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> dict:
     """Get number of tickets by status for the last n days.
 
     Args:
         n_days (int): The number of days from which to fetch ticket data.
-        Default is 7 days.
+        Default is 31 days.
 
     Returns:
         dict: A dictionary containing the number of tickets for each status
@@ -493,7 +496,7 @@ def get_data(n_days: int = 31):
         total_tickets = TicketModel.select().count()
 
         # Get the total number of tickets created in the last n days
-        start_date = datetime.utcnow() - timedelta(days=n_days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=n_days)
         # Query for getting the count of tickets by status in the last n days
         tickets = (
             TicketModel.select(
@@ -529,7 +532,7 @@ def get_data(n_days: int = 31):
         "tickets_by_type": {ticket.type: ticket.count for ticket in tickets_by_type},
         "n_days": n_days,
         "start_date": start_date.isoformat(),
-        "end_date": datetime.utcnow().isoformat(),
+        "end_date": datetime.now(timezone.utc).isoformat(),
     }
 
     return result
