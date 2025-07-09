@@ -2,13 +2,17 @@ import hashlib
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+
 try:
     from enum import StrEnum, auto
 except ImportError:
     # Python < 3.11 compatibility
     from enum import Enum, auto
+
     class StrEnum(str, Enum):
         pass
+
+
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -24,6 +28,7 @@ from openfoodfacts.utils import URLBuilder, get_logger
 from peewee import DoesNotExist, fn
 from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, Field
+
 try:
     from pydantic import model_validator
 except ImportError:

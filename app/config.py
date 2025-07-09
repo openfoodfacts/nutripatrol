@@ -1,11 +1,15 @@
 import os
+
 try:
     from enum import StrEnum
 except ImportError:
     # Python < 3.11 compatibility
     from enum import Enum
+
     class StrEnum(str, Enum):
         pass
+
+
 from pathlib import Path
 
 from openfoodfacts import Environment
@@ -59,7 +63,9 @@ class Settings(BaseSettings):
                 "url": os.environ.get(
                     "API_SERVER_URL", "https://nutripatrol.openfoodfacts.org"
                 ),
-                "description": os.environ.get("API_SERVER_DESCRIPTION", "Production server"),
+                "description": os.environ.get(
+                    "API_SERVER_DESCRIPTION", "Production server"
+                ),
             },
             {"url": "http://localhost:8000", "description": "Local development server"},
         ]
