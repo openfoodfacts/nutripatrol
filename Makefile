@@ -45,6 +45,14 @@ build:
 pull:
 	${DOCKER_COMPOSE} pull
 
+status:
+	@echo "🥫 Getting container status …"
+	${DOCKER_COMPOSE} ps
+
+log:
+	@echo "🥫 Reading logs (docker compose) …"
+	${DOCKER_COMPOSE} logs -f api
+
 up:
 ifdef service
 	${DOCKER_COMPOSE} up -d ${service} 2>&1
