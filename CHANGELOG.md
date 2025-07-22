@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/openfoodfacts/nutripatrol/compare/v1.2.0...v1.2.1) (2025-07-22)
+
+
+### Bug Fixes
+
+* add new commands to Makefile ([#106](https://github.com/openfoodfacts/nutripatrol/issues/106)) ([4af6d08](https://github.com/openfoodfacts/nutripatrol/commit/4af6d0829d2f2f6ac9d47fa44edb872c9db5305b))
+
 ## [1.2.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.1.2...v1.2.0) (2025-07-22)
 
 
