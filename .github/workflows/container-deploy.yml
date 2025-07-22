@@ -28,17 +28,18 @@ jobs:
     steps:
     - name: Set common variables
       run: |
-        echo "SSH_PROXY_HOST=ovh1.openfoodfacts.org" >> $GITHUB_ENV
         echo "SSH_USERNAME=off" >> $GITHUB_ENV
     - name: Set various variable for staging (net) deployment
       if: matrix.env == 'nutripatrol-net'
       run: |
+        echo "SSH_PROXY_HOST=ovh1.openfoodfacts.org" >> $GITHUB_ENV
         echo "SSH_HOST=10.1.0.200" >> $GITHUB_ENV
         echo "ENVIRONMENT=staging" >> $GITHUB_ENV
         echo "OFF_TLD=net" >> $GITHUB_ENV
     - name: Set various variable for staging (org) deployment
       if: matrix.env == 'nutripatrol-org'
       run: |
+        echo "SSH_PROXY_HOST=ovh2.openfoodfacts.org" >> $GITHUB_ENV
         echo "SSH_HOST=10.1.0.201" >> $GITHUB_ENV
         echo "ENVIRONMENT=prod" >> $GITHUB_ENV
         echo "OFF_TLD=org" >> $GITHUB_ENV
