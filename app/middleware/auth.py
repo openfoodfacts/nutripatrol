@@ -45,6 +45,10 @@ def get_auth_server(request: Request):
         (
             "https",  # Use 'https' scheme, as auth server is always secure
             new_netloc,
+            "",
+            "",
+            "",
+            "",
         )
     )
 
