@@ -50,5 +50,7 @@ make up
 In .env file uncomment the AUTH_SERVER_STATIC variable.
 If you want to use a local Product Opener Instance, use `http://world.openfoodfacts.localhost`
 
-Then connect to your Open Food Facts profile, copy the session cookie
-and paste it in the body at this endpoint /set_session_cookie (you have a form at the /docs URI).
+Then connect to your Open Food Facts profile,
+copy the session cookie
+(use developper toolbar, and find a cookie named session for openfoodfacts.org domain, copy its value)
+and paste it in the body at this endpoint /api/set_session_cookie (you have a form at the /api/docs URI).
