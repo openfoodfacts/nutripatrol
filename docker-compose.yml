@@ -14,8 +14,15 @@ x-api-common: &api-common
     - OFF_TLD
     - AUTH_SERVER_STATIC
     - AUTH_BEARER_TOKEN_ROBOTOFF
+    - REDIS_HOST
+    - REDIS_UPDATE_HOST
+    - REDIS_UPDATE_PORT
+    - REDIS_STREAM_NAME
   networks:
     - default
+  depends_on:
+    - postgres
+    - redis
 
 services:
   api:
@@ -24,6 +31,14 @@ services:
       - ./static:/opt/nutripatrol/static
     depends_on:
       - postgres
+      - redis
+  
+  update-listener:
+    <<: *api-common
+    mem_limit: 1g
+    depends_on:
+      - redis
+    command: python -m app run-update-listener
 
   postgres:
     restart: $RESTART_POLICY
@@ -50,7 +65,20 @@ services:
       - ./static:/var/static
     ports:
       - ${API_EXPOSE:-127.0.0.1:8000}:80
+    
+  redis:
+    restart: $RESTART_POLICY
+    image: redis:7.0.5-alpine
+    volumes:
+      - redis-data:/var/lib/redis/data
+    environment:
+      REDIS_ARGS: --save 60 1000 --appendonly yes
+    mem_limit: 4g
+    ports:
+      - "${REDIS_EXPOSE:-127.0.0.1:5502}:6379"
 
 volumes:
   postgres-data:
     name: ${COMPOSE_PROJECT_NAME:-nutripatrol}-postgres-data
+  redis-data:
+    name: ${COMPOSE_PROJECT_NAME:-nutripatrol}-redis-data
