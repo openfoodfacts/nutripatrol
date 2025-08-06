@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.config import settings
 from app.middleware.auth import UserStatus, get_auth_dependency
 from app.models import FlagModel, TicketModel, db
-from app.utils import init_sentry
+from app.settings import init_sentry
 
 logger = get_logger(level=settings.log_level.to_int())
 

@@ -31,5 +31,18 @@ def add_revision(
         add_revision(name)
 
 
+@app.command()
+def run_update_listener():
+    """Launch a process that listens to product updates published on Redis
+    stream."""
+    from app.settings import init_sentry
+    from app.utils.logger import get_logger
+    from app.workers.update_listener import run_update_listener
+
+    get_logger()
+    init_sentry()
+    run_update_listener()
+
+
 def main() -> None:
     app()

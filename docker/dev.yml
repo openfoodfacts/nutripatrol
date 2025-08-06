@@ -17,4 +17,21 @@ services:
   api:
     <<: *api-base
     # uvicorn in reload mode
-    command: ["uvicorn", "app.api:app", "--proxy-headers", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command:
+      [
+        "uvicorn",
+        "app.api:app",
+        "--proxy-headers",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
+
+  update-listener:
+    <<: *api-base
+    mem_limit: 1g
+    depends_on:
+      - redis
+    command: python -m app run-update-listener
