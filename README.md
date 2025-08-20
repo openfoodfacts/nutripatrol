@@ -83,7 +83,24 @@ If you have a suggestion that would make this project better, please fork the re
 - <https://wiki.openfoodfacts.org/Moderation>
 - [Meeting minutes](https://docs.google.com/document/d/1B9Ci42kl_jrFt2hi3PiWW9tM9l6B1sI5kQMI9Zd6QS4/edit)
 
-## Meeting
+## 🎨 Design
+- [![Figma](https://img.shields.io/badge/figma-%23F24E1E.svg?logo=figma&logoColor=white) Mockups & Benchmarks](https://www.figma.com/design/SRU9iQ5DIpKNa6izKEiqyo/NutriPatrol--quality-?node-id=48-36&p=f&t=Ly2rYxJgs4fcTane-0)
+- Are you a designer ? [Join the design team](https://github.com/openfoodfacts/openfoodfacts-design)
+## Features
+- Image reporting
+- List of reported images
+## Roadmap
+- [ ] Insert main roadmap items here
+## Weekly meetings (Frontend meeting)
+
+- We e-meet Wednesdays · 11:00 – 11:25am - Time zone: Europe/Paris
+- ![Google Meet](https://meet.google.com/uep-fhvf-gto) Video call link: https://meet.google.com/uep-fhvf-gto
+- Join by phone: https://tel.meet/uep-fhvf-gto?pin=8160344286211
+- Add the Event to your Calendar by [adding the Open Food Facts community calendar to your calendar](https://wiki.openfoodfacts.org/Events)
+- [Weekly Agenda](https://docs.google.com/document/d/1BGHfvrgx5eFIGjK8aTNPK2QwAggRp4oohGuYG9lNX8g/edit?tab=t.0): please add the Agenda items as early as you can. Make sure to check the Agenda items in advance of the meeting, so that we have the most informed discussions possible, leading to argumented decisions.
+- The meeting will handle Agenda items first, and if time permits, collaborative bug triage.
+- We strive to timebox the core of the meeting (decision making) to 30 minutes, with an optional free discussion/live debugging afterwards.
+- We take comprehensive notes in the Weekly Agenda of agenda item discussions and of decisions taken.
 
 Valentin (@valimp) and Raphael (@raphael0202) are working on this tool. They meet weekly. Please ping them on Slack if you'd like to contribute.
 We have more general quality meetings every month.
@@ -101,4 +118,8 @@ Open Food Facts - tech@openfoodfacts.org
 Project Link: [https://github.com/openfoodfacts/nutripatrol](https://github.com/openfoodfacts/nutripatrol)
 
 This README is a starting point. Feel free to suggest improvements!
+## Contributors
 
+<a href="https://github.com/openfoodfacts/nutripatrol-frontend/graphs/contributors">
+<img alt="List of contributors to this repository" src="https://contrib.rocks/image?repo=openfoodfacts/nutripatrol-frontend" />
+</a>
