@@ -574,7 +574,13 @@ if auth_server_static and auth_server_static != "":
         Then, call this endpoint with the session cookie in the body.
         """
         response = PlainTextResponse("Session cookie set")
-        response.set_cookie(key="session", value=body.session)
+        response.set_cookie(
+            key="session",
+            value=body.session,
+            secure=True,
+            httponly=True,
+            samesite="Strict"
+        )
         return response
 
 
