@@ -2,7 +2,17 @@ import hashlib
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from enum import StrEnum, auto
+
+try:
+    from enum import StrEnum, auto
+except ImportError:
+    # Python < 3.11 compatibility
+    from enum import Enum, auto
+
+    class StrEnum(str, Enum):
+        pass
+
+
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -17,7 +27,13 @@ from openfoodfacts.images import generate_image_url
 from openfoodfacts.utils import URLBuilder, get_logger
 from peewee import DoesNotExist, fn
 from playhouse.shortcuts import model_to_dict
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
+
+try:
+    from pydantic import model_validator
+except ImportError:
+    # Pydantic v1 compatibility
+    from pydantic import validator as model_validator
 
 from app.config import settings
 from app.middleware.auth import UserStatus, get_auth_dependency
@@ -76,6 +92,13 @@ app = FastAPI(
     },
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
+    servers=settings.api_servers,
+    openapi_tags=[
+        {"name": "System", "description": "System health and general API information"},
+        {"name": "Flags", "description": "CRUD operations for product and image flags"},
+        {"name": "Tickets", "description": "Ticket management and retrieval"},
+        {"name": "Statistics", "description": "Analytics and reporting endpoints"},
+    ],
 )
 app.add_middleware(
     CORSMiddleware,
@@ -94,7 +117,7 @@ async def startup():
     FastAPICache.init(InMemoryBackend(), prefix="nutripatrol-cache")
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, tags=["System"])
 def main_page(request: Request):
     return templates.TemplateResponse(
         "index.html",
@@ -102,7 +125,7 @@ def main_page(request: Request):
     )
 
 
-@app.get("/robots.txt", response_class=PlainTextResponse)
+@app.get("/robots.txt", response_class=PlainTextResponse, tags=["System"])
 def robots_txt():
     return """User-agent: *\nDisallow: /"""
 
@@ -281,7 +304,7 @@ class FlagsByTicketIdRequest(BaseModel):
     ticket_ids: list[int]
 
 
-@api_v1_router.post("/flags")
+@api_v1_router.post("/flags", tags=["Flags"])
 def create_flag(
     flag: FlagCreate,
     request: Request,
@@ -343,7 +366,7 @@ def create_flag(
         )
 
 
-@api_v1_router.get("/flags")
+@api_v1_router.get("/flags", tags=["Flags"])
 def get_flags(_: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
     """Get all flags.
 
@@ -353,7 +376,7 @@ def get_flags(_: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
         return {"flags": list(FlagModel.select().dicts().iterator())}
 
 
-@api_v1_router.get("/flags/{flag_id}")
+@api_v1_router.get("/flags/{flag_id}", tags=["Flags"])
 def get_flag(
     flag_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
 ):
@@ -373,7 +396,7 @@ def _create_ticket(ticket: TicketCreate):
     return TicketModel.create(**ticket.model_dump())
 
 
-@api_v1_router.get("/tickets")
+@api_v1_router.get("/tickets", tags=["Tickets"])
 def get_tickets(
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
@@ -418,7 +441,7 @@ def get_tickets(
         }
 
 
-@api_v1_router.get("/tickets/{ticket_id}")
+@api_v1_router.get("/tickets/{ticket_id}", tags=["Tickets"])
 def get_ticket(
     ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
 ):
@@ -433,7 +456,7 @@ def get_ticket(
             raise HTTPException(status_code=404, detail="Not found")
 
 
-@api_v1_router.post("/flags/batch")
+@api_v1_router.post("/flags/batch", tags=["Flags"])
 def get_flags_by_ticket_batch(
     flag_request: FlagsByTicketIdRequest,
     _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
@@ -456,7 +479,7 @@ def get_flags_by_ticket_batch(
     return {"ticket_id_to_flags": dict(ticket_id_to_flags)}
 
 
-@api_v1_router.put("/tickets/{ticket_id}/status")
+@api_v1_router.put("/tickets/{ticket_id}/status", tags=["Tickets"])
 def update_ticket_status(
     ticket_id: int,
     status: TicketStatus,
@@ -476,7 +499,7 @@ def update_ticket_status(
             raise HTTPException(status_code=404, detail="Not found")
 
 
-@api_v1_router.get("/stats")
+@api_v1_router.get("/stats", tags=["Statistics"])
 def get_stats(
     n_days: int = 31,
     _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
@@ -549,7 +572,7 @@ def get_stats(
     return result
 
 
-@api_v1_router.get("/status")
+@api_v1_router.get("/status", tags=["System"])
 def status():
     """Health check endpoint."""
     return {"status": "ok"}
@@ -564,7 +587,7 @@ class SessionBody(BaseModel):
 auth_server_static = os.getenv("AUTH_SERVER_STATIC")
 if auth_server_static and auth_server_static != "":
 
-    @api_v1_router.post("/set_session_cookie")
+    @api_v1_router.post("/set_session_cookie", tags=["System"])
     def set_session_cookie(request: Request, body: SessionBody):
         """Set the session cookie for the auth server.
         This route is only available in dev mode.
