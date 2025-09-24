@@ -585,7 +585,7 @@ def status() -> StatusResponse:
 # Route only available in dev mode
 # This route is used to set the session cookie for the auth server
 class SessionBody(BaseModel):
-    session: str
+    session: str = Field(..., pattern=r"^[A-Za-z0-9_\-\.=]+$")
 
 
 auth_server_static = os.getenv("AUTH_SERVER_STATIC")
