@@ -1,7 +1,7 @@
 ---
 name: Notify SDK repositories of API changes
 
-"on":
+on:
   release:
     types: [published]
 
@@ -28,13 +28,66 @@ jobs:
           # Check for API-related keywords
           pattern="(api|endpoint|route|breaking.*change|backward.*incompatible)"
           if echo "$release_text" | grep -E "$pattern" > /dev/null; then
-            echo "API changes detected in release notes!"
+            echo "✅ API changes detected in release notes!"
             echo "api_changes=true" >> $GITHUB_OUTPUT
-            echo "Found API-related terms in: $RELEASE_BODY"
           else
-            echo "No API changes detected in release notes."
+            echo "ℹ️ No API changes detected in release notes."
             echo "api_changes=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Create Python script for issue creation
+        if: steps.check-api.outputs.api_changes == 'true'
+        run: |
+          cat > create_issues.py << 'EOF'
+          import json
+          import os
+          import sys
+          import subprocess
+
+          title = f"Update SDK for NutriPatrol API changes in {os.environ['RELEASE_TAG']}"
+          
+          body = f"""## 🔄 API Changes Notification
+
+          **NutriPatrol Release:** [{os.environ['RELEASE_NAME']}]({os.environ['RELEASE_URL']})
+          **Tag:** `{os.environ['RELEASE_TAG']}`
+
+          The NutriPatrol API has been updated with changes that may affect this SDK.
+          Please review the release notes and update the SDK accordingly.
+
+          ### 📋 Release Notes
+          ```
+          {os.environ['RELEASE_BODY']}
+          ```
+
+          ### ✅ Action Required
+          - [ ] Review the API changes in the release notes above
+          - [ ] Identify which endpoints/functions are affected
+          - [ ] Update SDK code to match any new or changed endpoints
+          - [ ] Update SDK documentation if needed
+          - [ ] Add/update tests for new functionality
+          - [ ] Test SDK functionality with the new API
+          - [ ] Release updated SDK version
+          - [ ] Update any example code or tutorials
+
+          ### 🔗 Useful Links
+          - [NutriPatrol API Documentation](https://nutripatrol.openfoodfacts.org/api/docs)
+          - [Release Notes]({os.environ['RELEASE_URL']})
+          - [NutriPatrol Repository](https://github.com/openfoodfacts/nutripatrol)
+
+          ---
+          This issue was automatically created by the NutriPatrol API change notification workflow.
+          If this was created in error, please let us know in the [NutriPatrol repository](https://github.com/openfoodfacts/nutripatrol/issues).
+          """
+
+          payload = {
+              "title": title,
+              "body": body,
+              "labels": ["enhancement", "api-update"]
+          }
+
+          with open('issue_payload.json', 'w') as f:
+              json.dump(payload, f, indent=2)
+          EOF
 
       - name: Create issues in SDK repositories
         if: steps.check-api.outputs.api_changes == 'true'
@@ -43,8 +96,8 @@ jobs:
           RELEASE_NAME: ${{ github.event.release.name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_BODY: ${{ github.event.release.body }}
         run: |
-          # List of SDK repositories to notify
           SDK_REPOS=(
             "openfoodfacts/openfoodfacts-php"
             "openfoodfacts/openfoodfacts-js"
@@ -57,56 +110,48 @@ jobs:
             "openfoodfacts/openfoodfacts-go"
           )
 
-          # Issue template
-          TITLE="Update SDK for NutriPatrol API changes in $RELEASE_TAG"
-          BODY="## API Changes Notification
+          # Create the issue payload
+          python3 create_issues.py
 
-          **NutriPatrol Release:** [$RELEASE_NAME]($RELEASE_URL)
-          **Tag:** \`$RELEASE_TAG\`
+          successful_repos=()
+          failed_repos=()
 
-          The NutriPatrol API has been updated with changes that may
-          affect this SDK. Please review the release notes and update
-          the SDK accordingly.
-
-          ### Release Notes
-          ${{ github.event.release.body }}
-
-          ### Action Required
-          - [ ] Review the API changes in the release notes
-          - [ ] Update SDK code to match any new or changed endpoints
-          - [ ] Update documentation if needed
-          - [ ] Test SDK functionality with the new API
-          - [ ] Release updated SDK version
-
-          ---
-          This issue was automatically created by the NutriPatrol
-          API change notification workflow."
-
-          # Create issues in each SDK repository
           for repo in "${SDK_REPOS[@]}"; do
-            echo "Creating issue in $repo..."
+            echo "📤 Creating issue in $repo..."
 
-            # Create the issue using GitHub API
-            response=$(curl -s -w "%{http_code}" -X POST \
+            response=$(curl -s -w "\n%{http_code}" -X POST \
               -H "Authorization: token $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
+              -H "User-Agent: NutriPatrol-API-Notifier" \
               "https://api.github.com/repos/$repo/issues" \
-              -d "{
-                \"title\": \"$TITLE\",
-                \"body\": \"$BODY\",
-                \"labels\": [\"enhancement\", \"api-update\"]
-              }")
+              -d @issue_payload.json)
 
-            http_code="${response: -3}"
-            response_body="${response%???}"
-
+            http_code=$(echo "$response" | tail -1)
+            
             if [ "$http_code" = "201" ]; then
               echo "✅ Successfully created issue in $repo"
+              successful_repos+=("$repo")
             else
               echo "❌ Failed to create issue in $repo (HTTP $http_code)"
-              echo "Response: $response_body"
+              failed_repos+=("$repo")
             fi
 
-            # Small delay to avoid rate limiting
-            sleep 2
+            sleep 3
           done
+
+          echo ""
+          echo "📊 Summary:"
+          echo "✅ Successful: ${#successful_repos[@]} repositories"
+          echo "❌ Failed: ${#failed_repos[@]} repositories"
+
+          if [ ${#successful_repos[@]} -gt 0 ]; then
+            echo "✅ Issues created successfully in:"
+            printf '   - %s\n' "${successful_repos[@]}"
+          fi
+
+          if [ ${#failed_repos[@]} -gt 0 ]; then
+            echo "❌ Failed to create issues in:"
+            printf '   - %s\n' "${failed_repos[@]}"
+          fi
+
+          echo "🎉 All SDK repositories have been notified of API changes!"
