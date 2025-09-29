@@ -1,0 +1,112 @@
+---
+name: Notify SDK repositories of API changes
+
+"on":
+  release:
+    types: [published]
+
+jobs:
+  check-api-changes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for API changes
+        id: check-api
+        env:
+          RELEASE_BODY: ${{ github.event.release.body }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          echo "Checking release for API changes..."
+          echo "Release: $RELEASE_NAME ($RELEASE_TAG)"
+
+          # Convert to lowercase for case-insensitive matching
+          release_text=$(echo "$RELEASE_BODY" | tr '[:upper:]' '[:lower:]')
+
+          # Check for API-related keywords
+          pattern="(api|endpoint|route|breaking.*change|backward.*incompatible)"
+          if echo "$release_text" | grep -E "$pattern" > /dev/null; then
+            echo "API changes detected in release notes!"
+            echo "api_changes=true" >> $GITHUB_OUTPUT
+            echo "Found API-related terms in: $RELEASE_BODY"
+          else
+            echo "No API changes detected in release notes."
+            echo "api_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create issues in SDK repositories
+        if: steps.check-api.outputs.api_changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+        run: |
+          # List of SDK repositories to notify
+          SDK_REPOS=(
+            "openfoodfacts/openfoodfacts-php"
+            "openfoodfacts/openfoodfacts-js"
+            "openfoodfacts/openfoodfacts-laravel"
+            "openfoodfacts/openfoodfacts-python"
+            "openfoodfacts/openfoodfacts-ruby"
+            "openfoodfacts/openfoodfacts-java"
+            "openfoodfacts/openfoodfacts-elixir"
+            "openfoodfacts/openfoodfacts-dart"
+            "openfoodfacts/openfoodfacts-go"
+          )
+
+          # Issue template
+          TITLE="Update SDK for NutriPatrol API changes in $RELEASE_TAG"
+          BODY="## API Changes Notification
+
+          **NutriPatrol Release:** [$RELEASE_NAME]($RELEASE_URL)
+          **Tag:** \`$RELEASE_TAG\`
+
+          The NutriPatrol API has been updated with changes that may
+          affect this SDK. Please review the release notes and update
+          the SDK accordingly.
+
+          ### Release Notes
+          ${{ github.event.release.body }}
+
+          ### Action Required
+          - [ ] Review the API changes in the release notes
+          - [ ] Update SDK code to match any new or changed endpoints
+          - [ ] Update documentation if needed
+          - [ ] Test SDK functionality with the new API
+          - [ ] Release updated SDK version
+
+          ---
+          This issue was automatically created by the NutriPatrol
+          API change notification workflow."
+
+          # Create issues in each SDK repository
+          for repo in "${SDK_REPOS[@]}"; do
+            echo "Creating issue in $repo..."
+
+            # Create the issue using GitHub API
+            response=$(curl -s -w "%{http_code}" -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/$repo/issues" \
+              -d "{
+                \"title\": \"$TITLE\",
+                \"body\": \"$BODY\",
+                \"labels\": [\"enhancement\", \"api-update\"]
+              }")
+
+            http_code="${response: -3}"
+            response_body="${response%???}"
+
+            if [ "$http_code" = "201" ]; then
+              echo "✅ Successfully created issue in $repo"
+            else
+              echo "❌ Failed to create issue in $repo (HTTP $http_code)"
+              echo "Response: $response_body"
+            fi
+
+            # Small delay to avoid rate limiting
+            sleep 2
+          done
