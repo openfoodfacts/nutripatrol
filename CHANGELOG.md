@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.2](https://github.com/openfoodfacts/nutripatrol/compare/v1.2.1...v1.2.2) (2025-12-26)
+
+
+### Bug Fixes
+
+* add response models ([#118](https://github.com/openfoodfacts/nutripatrol/issues/118)) ([5784fec](https://github.com/openfoodfacts/nutripatrol/commit/5784fecb85fc6c92d09d8e9f6a5b9308f80c259f))
+* Update README.md ([1506108](https://github.com/openfoodfacts/nutripatrol/commit/15061080f4cbc132b251b97918c8cd0da153d951))
+
 ## [1.2.1](https://github.com/openfoodfacts/nutripatrol/compare/v1.2.0...v1.2.1) (2025-07-22)
 
 
