@@ -105,6 +105,8 @@ async def auth_dependency(request: Request, user_status: UserStatus):
         if user_data.get("moderator") is None:
             raise HTTPException(status_code=403, detail="User is not logged in")
 
+    return user_data
+
 
 @cache(key_builder=generate_cache_key, namespace="user-data", expire=60 * 60)
 async def _get_user_data_cached(session_cookie: str, auth_base_url: str) -> dict:
