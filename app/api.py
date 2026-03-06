@@ -482,18 +482,14 @@ def update_ticket_status(
             ticket = TicketModel.get_by_id(ticket_id)
             ticket.status = status
             ticket.save()
-            user_id = "unknown"
-            if isinstance(moderator_data, dict):
-                user_id = (
-                    moderator_data.get("user_id")
-                    or moderator_data.get("userid")
-                    or moderator_data.get("id")
-                    or moderator_data.get("name")
-                    or "unknown"
-                )
+            user_id = (
+                moderator_data.get("user_id", "unknown")
+                if isinstance(moderator_data, dict)
+                else "unknown"
+            )
             ModeratorActionModel.create(
-                action_type=f"set_status_{status}",
-                user_id=str(user_id),
+                action_type=f"set_status_{status.value}",
+                user_id=user_id,
                 ticket=ticket,
                 created_at=datetime.now(timezone.utc),
             )
