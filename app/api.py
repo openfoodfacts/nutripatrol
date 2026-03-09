@@ -471,6 +471,14 @@ def get_flags_by_ticket_batch(
 def update_ticket_status(
     ticket_id: int,
     status: TicketStatus,
+    action: Annotated[
+        str | None,
+        Query(
+            max_length=20,
+            description="Optional moderator action description. Suggested values: "
+            "`fix`, `edit`, `dismiss`. Maximum 20 characters.",
+        ),
+    ] = None,
     moderator_data: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
 ) -> Ticket:
     """Update the status of a ticket by ID.
@@ -487,8 +495,11 @@ def update_ticket_status(
                 if isinstance(moderator_data, dict)
                 else "unknown"
             )
+            action_type = (
+                action.strip() if isinstance(action, str) and action.strip() else None
+            )
             ModeratorActionModel.create(
-                action_type=f"set_status_{status.value}",
+                action_type=action_type or f"set_status_{status.value}",
                 user_id=user_id,
                 ticket=ticket,
                 created_at=datetime.now(timezone.utc),

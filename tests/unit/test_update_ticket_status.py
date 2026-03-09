@@ -10,7 +10,7 @@ from app.api import TicketStatus, update_ticket_status
 class TestUpdateTicketStatus(TestCase):
     @patch("app.api.ModeratorActionModel.create")
     @patch("app.api.TicketModel.get_by_id")
-    def test_update_ticket_status_records_moderator_action(
+    def test_update_ticket_status_records_custom_moderator_action(
         self, mock_get_by_id, mock_create
     ):
         ticket = Mock()
@@ -23,6 +23,7 @@ class TestUpdateTicketStatus(TestCase):
             result = update_ticket_status(
                 ticket_id=42,
                 status=TicketStatus.closed,
+                action="fix",
                 moderator_data={"user_id": "moderator-123"},
             )
 
@@ -31,10 +32,56 @@ class TestUpdateTicketStatus(TestCase):
         ticket.save.assert_called_once()
         mock_create.assert_called_once()
         create_kwargs = mock_create.call_args.kwargs
-        self.assertEqual(create_kwargs["action_type"], "set_status_closed")
+        self.assertEqual(create_kwargs["action_type"], "fix")
         self.assertEqual(create_kwargs["user_id"], "moderator-123")
         self.assertIs(create_kwargs["ticket"], ticket)
         self.assertIsNotNone(create_kwargs["created_at"])
+
+    @patch("app.api.ModeratorActionModel.create")
+    @patch("app.api.TicketModel.get_by_id")
+    def test_update_ticket_status_uses_default_action_when_missing(
+        self, mock_get_by_id, mock_create
+    ):
+        ticket = Mock()
+        mock_get_by_id.return_value = ticket
+        db_mock = Mock()
+        db_mock.__enter__ = Mock(return_value=db_mock)
+        db_mock.__exit__ = Mock(return_value=False)
+
+        with patch("app.api.db", db_mock):
+            update_ticket_status(
+                ticket_id=42,
+                status=TicketStatus.closed,
+                action=None,
+                moderator_data={"user_id": "moderator-123"},
+            )
+
+        self.assertEqual(
+            mock_create.call_args.kwargs["action_type"], "set_status_closed"
+        )
+
+    @patch("app.api.ModeratorActionModel.create")
+    @patch("app.api.TicketModel.get_by_id")
+    def test_update_ticket_status_uses_default_action_when_action_is_whitespace(
+        self, mock_get_by_id, mock_create
+    ):
+        ticket = Mock()
+        mock_get_by_id.return_value = ticket
+        db_mock = Mock()
+        db_mock.__enter__ = Mock(return_value=db_mock)
+        db_mock.__exit__ = Mock(return_value=False)
+
+        with patch("app.api.db", db_mock):
+            update_ticket_status(
+                ticket_id=42,
+                status=TicketStatus.closed,
+                action="   ",
+                moderator_data={"user_id": "moderator-123"},
+            )
+
+        self.assertEqual(
+            mock_create.call_args.kwargs["action_type"], "set_status_closed"
+        )
 
     @patch("app.api.ModeratorActionModel.create")
     @patch("app.api.TicketModel.get_by_id")
@@ -51,6 +98,7 @@ class TestUpdateTicketStatus(TestCase):
             update_ticket_status(
                 ticket_id=42,
                 status=TicketStatus.closed,
+                action=None,
                 moderator_data=None,
             )
 
@@ -69,6 +117,7 @@ class TestUpdateTicketStatus(TestCase):
             update_ticket_status(
                 ticket_id=404,
                 status=TicketStatus.closed,
+                action=None,
                 moderator_data={"user_id": "moderator-123"},
             )
 
