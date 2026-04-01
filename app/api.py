@@ -386,6 +386,7 @@ class GetTicketsResponse(BaseModel):
 
 @api_v1_router.get("/tickets")
 def get_tickets(
+    barcode: str | None = None,
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
     reason: Annotated[list[ReasonType] | None, Query()] = None,
@@ -401,6 +402,8 @@ def get_tickets(
         offset = (page - 1) * page_size
         # Get IDs of flags with the specified filters
         where_clause = []
+        if barcode:
+            where_clause.append(TicketModel.barcode == barcode)
         if status:
             where_clause.append(TicketModel.status == status)
         if type_:
