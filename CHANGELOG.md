@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.2.1...v1.3.0) (2026-04-01)
+
+
+### Features
+
+* **api:** add barcode filter to tickets endpoint ([#153](https://github.com/openfoodfacts/nutripatrol/issues/153)) ([44ebd22](https://github.com/openfoodfacts/nutripatrol/commit/44ebd225aaa27f48170acfcb3f8982effd086c5d))
+
+
+### Bug Fixes
+
+* add response models ([#118](https://github.com/openfoodfacts/nutripatrol/issues/118)) ([5784fec](https://github.com/openfoodfacts/nutripatrol/commit/5784fecb85fc6c92d09d8e9f6a5b9308f80c259f))
+* Update README.md ([1506108](https://github.com/openfoodfacts/nutripatrol/commit/15061080f4cbc132b251b97918c8cd0da153d951))
+
 ## [1.2.1](https://github.com/openfoodfacts/nutripatrol/compare/v1.2.0...v1.2.1) (2025-07-22)
 
 
