@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.config import settings
 from app.middleware.auth import UserStatus, get_auth_dependency
-from app.models import FlagModel, TicketModel, db
+from app.models import FlagModel, ModeratorActionModel, TicketModel, db
 from app.utils import init_sentry
 
 logger = get_logger(level=settings.log_level.to_int())
@@ -474,7 +474,15 @@ def get_flags_by_ticket_batch(
 def update_ticket_status(
     ticket_id: int,
     status: TicketStatus,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    action: Annotated[
+        str | None,
+        Query(
+            max_length=20,
+            description="Optional moderator action description. Suggested values: "
+            "`fix`, `edit`, `dismiss`. Maximum 20 characters.",
+        ),
+    ] = None,
+    moderator_data: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
 ) -> Ticket:
     """Update the status of a ticket by ID.
 
@@ -485,6 +493,20 @@ def update_ticket_status(
             ticket = TicketModel.get_by_id(ticket_id)
             ticket.status = status
             ticket.save()
+            user_id = (
+                moderator_data.get("user_id", "unknown")
+                if isinstance(moderator_data, dict)
+                else "unknown"
+            )
+            action_type = (
+                action.strip() if isinstance(action, str) and action.strip() else None
+            )
+            ModeratorActionModel.create(
+                action_type=action_type or f"set_status_{status.value}",
+                user_id=user_id,
+                ticket=ticket,
+                created_at=datetime.now(timezone.utc),
+            )
             return ticket
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Not found")
