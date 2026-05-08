@@ -161,7 +161,8 @@ class TicketCreate(BaseModel):
         ..., description="Flavor (project) associated with the ticket"
     )
     created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="Creation datetime of the ticket"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Creation datetime of the ticket",
     )
 
 
