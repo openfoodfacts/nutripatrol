@@ -50,7 +50,7 @@ A flag containes the following main fields:
 ## Tickets
 Automatically created when a flag is created and no ticket exists for the product or image.
 
-A ticket containes the following main fields:
+A ticket contains the following main fields:
 - `barcode`: Barcode of the product, if the ticket is about a product or a product image. In case of a search issue, this field is null.
 
 - `type`: Type of the issue. It can be `product`, `image` or `search`.
