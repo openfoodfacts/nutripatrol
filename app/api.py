@@ -32,7 +32,7 @@ We call a report a "**flag**" and a report will be associated with a "**ticket**
 
 ## Flags
 
-A flag containes the following main fields:
+A flag contains the following main fields:
 - `barcode`: Barcode of the product, if the flag is about a product or a product image. In case of a search issue, this field is null.
 
 - `type`: Type of the issue. It can be `product`, `image` or `search`.
@@ -50,7 +50,7 @@ A flag containes the following main fields:
 ## Tickets
 Automatically created when a flag is created and no ticket exists for the product or image.
 
-A ticket containes the following main fields:
+A ticket contains the following main fields:
 - `barcode`: Barcode of the product, if the ticket is about a product or a product image. In case of a search issue, this field is null.
 
 - `type`: Type of the issue. It can be `product`, `image` or `search`.
@@ -161,7 +161,8 @@ class TicketCreate(BaseModel):
         ..., description="Flavor (project) associated with the ticket"
     )
     created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="Creation datetime of the ticket"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Creation datetime of the ticket",
     )
 
 
@@ -215,7 +216,8 @@ class FlagCreate(BaseModel):
         description="Comment provided by the user during flagging. This is a free text field.",
     )
     created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="Creation datetime of the flag"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Creation datetime of the flag",
     )
 
     @model_validator(mode="after")
@@ -454,7 +456,7 @@ def get_flags_by_ticket_batch(
 ):
     """Get all flags for tickets by IDs.
 
-    This function is used to get all flags for tickets by there IDs.
+    This function is used to get all flags for tickets by their IDs.
     """
     with db:
         flags = list(
