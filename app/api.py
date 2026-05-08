@@ -32,7 +32,7 @@ We call a report a "**flag**" and a report will be associated with a "**ticket**
 
 ## Flags
 
-A flag containes the following main fields:
+A flag contains the following main fields:
 - `barcode`: Barcode of the product, if the flag is about a product or a product image. In case of a search issue, this field is null.
 
 - `type`: Type of the issue. It can be `product`, `image` or `search`.
