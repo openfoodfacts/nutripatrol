@@ -454,7 +454,7 @@ def get_flags_by_ticket_batch(
 ):
     """Get all flags for tickets by IDs.
 
-    This function is used to get all flags for tickets by there IDs.
+    This function is used to get all flags for tickets by their IDs.
     """
     with db:
         flags = list(
