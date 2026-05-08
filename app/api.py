@@ -215,7 +215,8 @@ class FlagCreate(BaseModel):
         description="Comment provided by the user during flagging. This is a free text field.",
     )
     created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="Creation datetime of the flag"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Creation datetime of the flag",
     )
 
     @model_validator(mode="after")
