@@ -27,7 +27,7 @@
 
 * add a route to get some data on moderation ([#89](https://github.com/openfoodfacts/nutripatrol/issues/89)) ([6e0563a](https://github.com/openfoodfacts/nutripatrol/commit/6e0563ae338b2cb24933788e4266216c7182c2cc))
 * cache user data ([0d85af9](https://github.com/openfoodfacts/nutripatrol/commit/0d85af9b57be40c33139e727c3e73b9d628754c9))
-* prevent brut force and expired cache ([a256497](https://github.com/openfoodfacts/nutripatrol/commit/a256497db12ca04716957db612a08e474d0ddac1))
+* prevent brute force and expired cache ([a256497](https://github.com/openfoodfacts/nutripatrol/commit/a256497db12ca04716957db612a08e474d0ddac1))
 * protect routes ([a92e909](https://github.com/openfoodfacts/nutripatrol/commit/a92e9099a2686b7918503c586a12101576a7264e))
 * route to paste cookie ([1324a17](https://github.com/openfoodfacts/nutripatrol/commit/1324a177a670f49a4c3c346acaa64d1028b67653))
 * setup an auth middleware ([1e21f10](https://github.com/openfoodfacts/nutripatrol/commit/1e21f1034be85e70d0425f6bc0cc4d0f74f5fec2))
