@@ -1,6 +1,174 @@
 <!DOCTYPE html>
-<html>
-    <body>
-        <p>Hello world!</p>
-    </body>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nutri-Patrol</title>
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #212529;
+            --card-bg: #f8f9fa;
+            --border-color: #dee2e6;
+            --btn-bg: #e9ecef;
+            --btn-hover-bg: #ced4da;
+            --btn-active-bg: #0d6efd;
+            --btn-active-text: #ffffff;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --card-bg: #1e1e1e;
+            --border-color: #333333;
+            --btn-bg: #2c2c2c;
+            --btn-hover-bg: #3a3a3a;
+            --btn-active-bg: #0d6efd;
+            --btn-active-text: #ffffff;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: system-ui, -apple-system, sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+        }
+
+        .settings-panel {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            max-width: 360px;
+            box-shadow: var(--shadow);
+        }
+
+        .settings-panel h2 {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .theme-options {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .theme-btn {
+            flex: 1;
+            padding: 0.6rem 0.4rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--btn-bg);
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .theme-btn:hover {
+            background-color: var(--btn-hover-bg);
+        }
+
+        .theme-btn.active {
+            background-color: var(--btn-active-bg);
+            color: var(--btn-active-text);
+            border-color: var(--btn-active-bg);
+        }
+
+        .theme-btn .icon {
+            font-size: 1.3rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Nutri-Patrol</h1>
+    </header>
+
+    <main>
+        <div class="settings-panel">
+            <h2>Theme</h2>
+            <div class="theme-options">
+                <button class="theme-btn" id="btn-light" onclick="setTheme('light')" aria-label="Light mode">
+                    <span class="icon">☀️</span>
+                    Light
+                </button>
+                <button class="theme-btn" id="btn-dark" onclick="setTheme('dark')" aria-label="Dark mode">
+                    <span class="icon">🌙</span>
+                    Dark
+                </button>
+                <button class="theme-btn" id="btn-system" onclick="setTheme('system')" aria-label="Follow system theme">
+                    <span class="icon">💻</span>
+                    System
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const THEME_KEY = 'nutripatrol-theme';
+
+        function applyTheme(preference) {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const useDark = preference === 'dark' || (preference === 'system' && prefersDark);
+            document.documentElement.setAttribute('data-theme', useDark ? 'dark' : 'light');
+        }
+
+        function setTheme(preference) {
+            localStorage.setItem(THEME_KEY, preference);
+            applyTheme(preference);
+            updateButtons(preference);
+        }
+
+        function updateButtons(preference) {
+            document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+            const active = document.getElementById('btn-' + preference);
+            if (active) active.classList.add('active');
+        }
+
+        function init() {
+            const saved = localStorage.getItem(THEME_KEY) || 'system';
+            applyTheme(saved);
+            updateButtons(saved);
+
+            // Re-apply when system preference changes (only matters when mode is 'system')
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                const current = localStorage.getItem(THEME_KEY) || 'system';
+                if (current === 'system') {
+                    applyTheme('system');
+                }
+            });
+        }
+
+        init();
+    </script>
+</body>
 </html>
