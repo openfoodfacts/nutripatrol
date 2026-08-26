@@ -10,6 +10,15 @@ Pre-production: <https://nutripatrol.openfoodfacts.net>
 ## This is the backend
 - The frontend is located at https://github.com/openfoodfacts/nutripatrol-frontend
 
+## API documentation
+https://nutripatrol.openfoodfacts.org/api/docs
+
+## SDKs
+- Available in the JS SDK, the Dart SDK: https://github.com/openfoodfacts/openfoodfacts-js, https://github.com/openfoodfacts/openfoodfacts-dart
+
+## Webcomponent
+- Available as a webcomponent: https://openfoodfacts.github.io/openfoodfacts-webcomponents/?path=/story/components-nutri-patrol--flag-product
+
 ## **🌟 About the Project**
 
 The goal of NutriPatrol is to gamify the process of data verification for Open Food Facts. Moderators can quickly swipe through recent reports, to act on true issues and mark them as fixed, or flag incorrect ones as not a problem. This helps maintain the integrity of the data that powers countless apps and research projects related to food, nutrition, and health.
