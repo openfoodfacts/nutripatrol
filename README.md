@@ -19,6 +19,10 @@ https://nutripatrol.openfoodfacts.org/api/docs
 ## Webcomponent
 - Available as a webcomponent: https://openfoodfacts.github.io/openfoodfacts-webcomponents/?path=/story/components-nutri-patrol--flag-product
 
+## Understanding Open Food Facts' data quality infrastructure
+- https://wiki.openfoodfacts.org/Category:Data_quality
+- https://wiki.openfoodfacts.org/Data_quality
+
 ## **🌟 About the Project**
 
 The goal of NutriPatrol is to gamify the process of data verification for Open Food Facts. Moderators can quickly swipe through recent reports, to act on true issues and mark them as fixed, or flag incorrect ones as not a problem. This helps maintain the integrity of the data that powers countless apps and research projects related to food, nutrition, and health.
