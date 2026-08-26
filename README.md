@@ -88,12 +88,17 @@ If you have a suggestion that would make this project better, please fork the re
 - Are you a designer ? [Join the design team](https://github.com/openfoodfacts/openfoodfacts-design)
 ## Features
 - Image reporting
-- List of reported images
+- List of tickets (can be images, products…)
+- List of reported images (both by humans and Robotoff, our AI)
 ## Roadmap
-- [ ] Insert main roadmap items here
+### Backend
+- [ ] Support frontend features (filters, displaying the reporter, displaying the uploader…)
+### Frontend
+- [ ] More filters to focus on the most important issues first
+- [ ] Quick and easy actions to fix the errors
 ## Weekly meetings
 
-Valentin (@valimp) and Raphael (@raphael0202) are working on this tool. They meet weekly. Please ping them on Slack if you'd like to contribute.
+We currently have no maintener for this tool. Please ping us here or on Slack if you'd like to contribute.
 We have more general quality meetings every month.
 - The meeting will handle Agenda items first, and if time permits, collaborative bug triage.
 - We strive to timebox the core of the meeting (decision making) to 30 minutes, with an optional free discussion/live debugging afterwards.
