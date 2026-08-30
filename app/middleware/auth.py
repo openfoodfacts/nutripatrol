@@ -7,6 +7,9 @@ from urllib.parse import urlparse, urlunparse
 import httpx
 from fastapi import HTTPException, Request
 from fastapi_cache.decorator import cache
+from openfoodfacts.utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class UserStatus(StrEnum):
@@ -61,13 +64,14 @@ def get_auth_server(request: Request):
 
 
 def get_auth_dependency(user_status: UserStatus):
-    async def wrapper(request: Request):
+    async def wrapper(request: Request) -> str:
         return await auth_dependency(request, user_status)
 
     return wrapper
 
 
-async def auth_dependency(request: Request, user_status: UserStatus):
+async def auth_dependency(request: Request, user_status: UserStatus) -> str:
+    """Authenticate the request and return the acting user's id."""
     # Check for bearer token in Authorization header
     # Currently, this is only for robotoff
     auth_header = request.headers.get("Authorization")
@@ -80,7 +84,7 @@ async def auth_dependency(request: Request, user_status: UserStatus):
         ).hexdigest()
         if hashed_token != hashed_env_token:
             raise HTTPException(status_code=403, detail="Invalid bearer token")
-        return  # If the token is valid, we just return
+        return "robotoff"  # If the token is valid, we just return
 
     # If no bearer token is provided, we check for session cookie
     # Check for session cookie
@@ -95,7 +99,8 @@ async def auth_dependency(request: Request, user_status: UserStatus):
             status_code=400, detail=f"Invalid user status : {user_status}"
         )
 
-    user_data = await _get_user_data_cached(session_cookie, auth_base_url)
+    auth_response = await _get_user_data_cached(session_cookie, auth_base_url)
+    user_data = auth_response.get("user", {})
 
     if user_status == UserStatus.isModerator:
         if user_data.get("moderator") != 1:
@@ -105,6 +110,11 @@ async def auth_dependency(request: Request, user_status: UserStatus):
         if user_data.get("moderator") is None:
             raise HTTPException(status_code=403, detail="User is not logged in")
 
+    user_id = auth_response.get("user_id", "")
+    if not user_id:
+        logger.warning("auth.pl returned no user_id for an authenticated session")
+    return user_id
+
 
 @cache(key_builder=generate_cache_key, namespace="user-data", expire=60 * 60)
 async def _get_user_data_cached(session_cookie: str, auth_base_url: str) -> dict:
@@ -112,6 +122,11 @@ async def _get_user_data_cached(session_cookie: str, auth_base_url: str) -> dict
 
 
 async def _fetch_user_data(session_cookie: str, auth_base_url: str) -> dict:
+    """Fetch the full auth.pl response body.
+
+    Kept as the full body (not just the nested "user" object) because the
+    acting user's id is only available at the top level, as "user_id".
+    """
     async with httpx.AsyncClient() as client:
         response = await client.get(
             auth_base_url, cookies={"session": session_cookie}, params={"body": "1"}
@@ -121,4 +136,4 @@ async def _fetch_user_data(session_cookie: str, auth_base_url: str) -> dict:
         await asyncio.sleep(2)
         raise HTTPException(status_code=401, detail="Invalid session token")
 
-    return response.json().get("user", {})
+    return response.json()

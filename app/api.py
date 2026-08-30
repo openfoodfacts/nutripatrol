@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum, auto
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.config import settings
 from app.middleware.auth import UserStatus, get_auth_dependency
-from app.models import FlagModel, TicketModel, db
+from app.models import FlagModel, ModeratorActionModel, TicketModel, db
 from app.utils import init_sentry
 
 logger = get_logger(level=settings.log_level.to_int())
@@ -382,6 +382,19 @@ class GetTicketsResponse(BaseModel):
 
     tickets: list[Ticket]
     max_page: int
+    total: int
+
+
+# Whitelist of ticket fields that GET /tickets can sort by. Never pass raw
+# query input to getattr()/order_by() directly.
+TICKET_SORTABLE_FIELDS = {
+    "id": TicketModel.id,
+    "barcode": TicketModel.barcode,
+    "status": TicketModel.status,
+    "type": TicketModel.type,
+    "flavor": TicketModel.flavor,
+    "created_at": TicketModel.created_at,
+}
 
 
 @api_v1_router.get("/tickets")
@@ -389,7 +402,10 @@ def get_tickets(
     barcode: str | None = None,
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
+    flavor: Flavor | None = None,
     reason: Annotated[list[ReasonType] | None, Query()] = None,
+    sort_by: str = "created_at",
+    sort_order: Literal["asc", "desc"] = "desc",
     page: int = 1,
     page_size: int = 10,
     _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
@@ -398,6 +414,11 @@ def get_tickets(
 
     This function is used to get all tickets with status open.
     """
+    if sort_by not in TICKET_SORTABLE_FIELDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sort_by field, must be one of {list(TICKET_SORTABLE_FIELDS)}",
+        )
     with db:
         offset = (page - 1) * page_size
         # Get IDs of flags with the specified filters
@@ -408,34 +429,42 @@ def get_tickets(
             where_clause.append(TicketModel.status == status)
         if type_:
             where_clause.append(TicketModel.type == type_)
+        if flavor:
+            where_clause.append(TicketModel.flavor == flavor)
         if reason:
             subquery = FlagModel.select(FlagModel.ticket_id).where(
                 FlagModel.reason.in_(reason)
             )
             where_clause.append(TicketModel.id.in_(subquery))
 
+        # peewee's .where() raises on zero arguments (reduce() of an empty
+        # iterable), so only apply it when there is at least one filter --
+        # this is the plain, unfiltered "list everything" query otherwise.
+        query = TicketModel.select()
+        if where_clause:
+            query = query.where(*where_clause)
+
         # Get the total number of tickets with the specified filters
-        count = TicketModel.select().where(*where_clause).count()
+        count = query.count()
         max_page = count // page_size + int(count % page_size != 0)
         if page > max_page:
-            return GetTicketsResponse(tickets=[], max_page=max_page)
+            return GetTicketsResponse(tickets=[], max_page=max_page, total=count)
+
+        sort_field = TICKET_SORTABLE_FIELDS[sort_by]
+        order_expr = sort_field.asc() if sort_order == "asc" else sort_field.desc()
         return GetTicketsResponse(
             tickets=list(
-                TicketModel.select()
-                .where(*where_clause)
-                .order_by(TicketModel.created_at.desc())
-                .offset(offset)
-                .limit(page_size)
-                .dicts()
+                query.order_by(order_expr).offset(offset).limit(page_size).dicts()
             ),
             max_page=max_page,
+            total=count,
         )
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
 def get_ticket(
     ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
-):
+) -> Ticket:
     """Get a ticket by ID.
 
     This function is used to get a ticket by its ID.
@@ -470,24 +499,107 @@ def get_flags_by_ticket_batch(
     return {"ticket_id_to_flags": dict(ticket_id_to_flags)}
 
 
+def _update_ticket_status(
+    ticket_id: int, new_status: TicketStatus, user_id: str
+) -> TicketModel:
+    """Update a ticket's status and record who did it, if it actually changed."""
+    try:
+        ticket = TicketModel.get_by_id(ticket_id)
+    except DoesNotExist:
+        raise HTTPException(status_code=404, detail="Not found")
+    if ticket.status != new_status:
+        ticket.status = new_status
+        ticket.save()
+        ModeratorActionModel.create(
+            ticket=ticket,
+            user_id=user_id,
+            action_type=new_status,
+            created_at=datetime.utcnow(),
+        )
+    return ticket
+
+
 @api_v1_router.put("/tickets/{ticket_id}/status")
 def update_ticket_status(
     ticket_id: int,
     status: TicketStatus,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
 ) -> Ticket:
     """Update the status of a ticket by ID.
 
     This function is used to update the status of a ticket by its ID.
     """
     with db:
-        try:
-            ticket = TicketModel.get_by_id(ticket_id)
-            ticket.status = status
-            ticket.save()
-            return ticket
-        except DoesNotExist:
-            raise HTTPException(status_code=404, detail="Not found")
+        return _update_ticket_status(ticket_id, status, user_id)
+
+
+class ModeratorAction(BaseModel):
+    id: int = Field(..., description="ID of the moderator action")
+    action_type: TicketStatus = Field(
+        ..., description="The new ticket status this action set"
+    )
+    user_id: str = Field(..., description="Open Food Facts User ID of the moderator")
+    ticket_id: int = Field(..., description="ID of the ticket this action was taken on")
+    created_at: datetime = Field(..., description="When the action was taken")
+
+
+class GetModeratorActionsResponse(BaseModel):
+    """Response model for ticket- and user-scoped moderator action listings."""
+
+    actions: list[ModeratorAction]
+    total: int
+
+
+def _list_moderator_actions(
+    where_clause: list, page: int, page_size: int
+) -> GetModeratorActionsResponse:
+    offset = (page - 1) * page_size
+    total = ModeratorActionModel.select().where(*where_clause).count()
+    # Built from model instances rather than .dicts(): peewee's .dicts()
+    # emits the FK column under the Python attribute name ("ticket"),
+    # not the "ticket_id" the response model expects.
+    actions = [
+        ModeratorAction(
+            id=action.id,
+            action_type=action.action_type,
+            user_id=action.user_id,
+            ticket_id=action.ticket_id,
+            created_at=action.created_at,
+        )
+        for action in ModeratorActionModel.select()
+        .where(*where_clause)
+        .order_by(ModeratorActionModel.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    ]
+    return GetModeratorActionsResponse(actions=actions, total=total)
+
+
+@api_v1_router.get("/tickets/{ticket_id}/actions")
+def get_ticket_actions(
+    ticket_id: int,
+    page: int = 1,
+    page_size: int = 10,
+    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> GetModeratorActionsResponse:
+    """Get the moderation history of a ticket, most recent first."""
+    with db:
+        return _list_moderator_actions(
+            [ModeratorActionModel.ticket == ticket_id], page, page_size
+        )
+
+
+@api_v1_router.get("/moderator_actions/me")
+def get_my_actions(
+    page: int = 1,
+    page_size: int = 10,
+    user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> GetModeratorActionsResponse:
+    """Get the moderation history of the currently authenticated user, most recent first."""
+    with db:
+        return _list_moderator_actions(
+            [ModeratorActionModel.user_id == user_id], page, page_size
+        )
 
 
 class StatsResponse(BaseModel):
