@@ -396,7 +396,7 @@ def get_tickets(
 ) -> GetTicketsResponse:
     """Get all tickets.
 
-    This function is used to get all tickets with status open.
+    This function is used to get all tickets, optionally filtered by status.
     """
     with db:
         offset = (page - 1) * page_size
@@ -413,17 +413,18 @@ def get_tickets(
                 FlagModel.reason.in_(reason)
             )
             where_clause.append(TicketModel.id.in_(subquery))
+        query = TicketModel.select()
+        if where_clause:
+            query = query.where(*where_clause)
 
         # Get the total number of tickets with the specified filters
-        count = TicketModel.select().where(*where_clause).count()
+        count = query.count()
         max_page = count // page_size + int(count % page_size != 0)
         if page > max_page:
             return GetTicketsResponse(tickets=[], max_page=max_page)
         return GetTicketsResponse(
             tickets=list(
-                TicketModel.select()
-                .where(*where_clause)
-                .order_by(TicketModel.created_at.desc())
+                query.order_by(TicketModel.created_at.desc())
                 .offset(offset)
                 .limit(page_size)
                 .dicts()
