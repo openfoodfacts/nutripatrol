@@ -292,7 +292,7 @@ def create_flag(
     flag: FlagCreate,
     request: Request,
     _: Any = Depends(get_auth_dependency(UserStatus.isLoggedIn)),
-):
+) -> Flag:
     """Create a flag for a product.
 
     This function is used to create a flag for a product or an image.
@@ -344,25 +344,29 @@ def create_flag(
             ticket.save()
 
         device_id = _get_device_id(request)
-        return model_to_dict(
-            FlagModel.create(ticket=ticket, device_id=device_id, **flag.model_dump())
-        )
+        return FlagModel.create(ticket=ticket, device_id=device_id, **flag.model_dump())
+
+
+class GetFlagsResponse(BaseModel):
+    flags: list[Flag]
 
 
 @api_v1_router.get("/flags")
-def get_flags(_: Any = Depends(get_auth_dependency(UserStatus.isModerator))):
+def get_flags(
+    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> GetFlagsResponse:
     """Get all flags.
 
     This function is used to get all flags.
     """
     with db:
-        return {"flags": list(FlagModel.select().dicts().iterator())}
+        return GetFlagsResponse(flags=list(FlagModel.select().dicts()))
 
 
 @api_v1_router.get("/flags/{flag_id}")
 def get_flag(
     flag_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
-):
+) -> Flag:
     """Get a flag by ID.
 
     This function is used to get a flag by its ID.
@@ -379,15 +383,23 @@ def _create_ticket(ticket: TicketCreate):
     return TicketModel.create(**ticket.model_dump())
 
 
+class GetTicketsResponse(BaseModel):
+    """Response model for get_tickets endpoint."""
+
+    tickets: list[Ticket]
+    max_page: int
+
+
 @api_v1_router.get("/tickets")
 def get_tickets(
+    barcode: str | None = None,
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
     reason: Annotated[list[ReasonType] | None, Query()] = None,
     page: int = 1,
     page_size: int = 10,
     _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
-):
+) -> GetTicketsResponse:
     """Get all tickets.
 
     This function is used to get all tickets with status open.
@@ -396,6 +408,8 @@ def get_tickets(
         offset = (page - 1) * page_size
         # Get IDs of flags with the specified filters
         where_clause = []
+        if barcode:
+            where_clause.append(TicketModel.barcode == barcode)
         if status:
             where_clause.append(TicketModel.status == status)
         if type_:
@@ -410,9 +424,9 @@ def get_tickets(
         count = TicketModel.select().where(*where_clause).count()
         max_page = count // page_size + int(count % page_size != 0)
         if page > max_page:
-            return {"tickets": [], "max_page": max_page}
-        return {
-            "tickets": list(
+            return GetTicketsResponse(tickets=[], max_page=max_page)
+        return GetTicketsResponse(
+            tickets=list(
                 TicketModel.select()
                 .where(*where_clause)
                 .order_by(TicketModel.created_at.desc())
@@ -420,8 +434,8 @@ def get_tickets(
                 .limit(page_size)
                 .dicts()
             ),
-            "max_page": max_page,
-        }
+            max_page=max_page,
+        )
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
@@ -467,7 +481,7 @@ def update_ticket_status(
     ticket_id: int,
     status: TicketStatus,
     _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
-):
+) -> Ticket:
     """Update the status of a ticket by ID.
 
     This function is used to update the status of a ticket by its ID.
@@ -477,36 +491,51 @@ def update_ticket_status(
             ticket = TicketModel.get_by_id(ticket_id)
             ticket.status = status
             ticket.save()
-            return model_to_dict(ticket)
+            return ticket
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Not found")
+
+
+class StatsResponse(BaseModel):
+    """Response model for get_stats endpoint."""
+
+    total_tickets: int = Field(
+        ..., description="Total number of tickets in the database"
+    )
+    tickets_by_status: dict = Field(
+        ...,
+        description="A dictionary with ticket status as keys and the count of tickets as values",
+    )
+    tickets_by_flavor: dict = Field(
+        ...,
+        description="A dictionary with ticket flavor as keys and the count of tickets as values",
+    )
+    tickets_by_type: dict = Field(
+        ...,
+        description="A dictionary with ticket type as keys and the count of tickets as values",
+    )
+    n_days: int = Field(
+        ...,
+        description="The number of days for which the data is fetched",
+    )
+    start_date: str = Field(
+        ..., description="The start date of the data range in ISO format"
+    )
+    end_date: str = Field(
+        ..., description="The end date of the data range in ISO format"
+    )
 
 
 @api_v1_router.get("/stats")
 def get_stats(
     n_days: int = 31,
     _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
-) -> dict:
+) -> StatsResponse:
     """Get number of tickets by status for the last n days.
 
     Args:
         n_days (int): The number of days from which to fetch ticket data.
         Default is 31 days.
-
-    Returns:
-        dict: A dictionary containing the total number of tickets,
-        tickets by status, tickets by flavor, and tickets by type.
-        The keys are:
-            - total_tickets: Total number of tickets.
-            - tickets_by_status: A dictionary with ticket status as keys
-                and the count of tickets as values.
-            - tickets_by_flavor: A dictionary with ticket flavor as keys
-                and the count of tickets as values.
-            - tickets_by_type: A dictionary with ticket type as keys
-                and the count of tickets as values.
-            - n_days: The number of days for which the data is fetched.
-            - start_date: The start date of the data range in ISO format.
-            - end_date: The end date of the data range in ISO format.
     """
     with db:
         # Return the total number of tickets
@@ -540,25 +569,26 @@ def get_stats(
         )
 
     # Prepare the results
-    result = {
-        "total_tickets": total_tickets,
-        "tickets_by_status": {ticket.status: ticket.count for ticket in tickets},
-        "tickets_by_flavor": {
-            ticket.flavor: ticket.count for ticket in tickets_by_flavor
-        },
-        "tickets_by_type": {ticket.type: ticket.count for ticket in tickets_by_type},
-        "n_days": n_days,
-        "start_date": start_date.isoformat(),
-        "end_date": datetime.now(timezone.utc).isoformat(),
-    }
-
+    result = StatsResponse(
+        total_tickets=total_tickets,
+        tickets_by_status={ticket.status: ticket.count for ticket in tickets},
+        tickets_by_flavor={ticket.flavor: ticket.count for ticket in tickets_by_flavor},
+        tickets_by_type={ticket.type: ticket.count for ticket in tickets_by_type},
+        n_days=n_days,
+        start_date=start_date.isoformat(),
+        end_date=datetime.now(timezone.utc).isoformat(),
+    )
     return result
 
 
+class StatusResponse(BaseModel):
+    status: str = Field(..., description="Health status of the API")
+
+
 @api_v1_router.get("/status")
-def status():
+def status() -> StatusResponse:
     """Health check endpoint."""
-    return {"status": "ok"}
+    return StatusResponse(status="ok")
 
 
 # Route only available in dev mode
