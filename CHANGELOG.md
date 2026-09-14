@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.2.1...v1.3.0) (2026-04-01)
+
+
+### Features
+
+* **api:** add barcode filter to tickets endpoint ([#153](https://github.com/openfoodfacts/nutripatrol/issues/153)) ([44ebd22](https://github.com/openfoodfacts/nutripatrol/commit/44ebd225aaa27f48170acfcb3f8982effd086c5d))
+
+
+### Bug Fixes
+
+* add response models ([#118](https://github.com/openfoodfacts/nutripatrol/issues/118)) ([5784fec](https://github.com/openfoodfacts/nutripatrol/commit/5784fecb85fc6c92d09d8e9f6a5b9308f80c259f))
+* Update README.md ([1506108](https://github.com/openfoodfacts/nutripatrol/commit/15061080f4cbc132b251b97918c8cd0da153d951))
+
 ## [1.2.1](https://github.com/openfoodfacts/nutripatrol/compare/v1.2.0...v1.2.1) (2025-07-22)
 
 
@@ -14,7 +27,7 @@
 
 * add a route to get some data on moderation ([#89](https://github.com/openfoodfacts/nutripatrol/issues/89)) ([6e0563a](https://github.com/openfoodfacts/nutripatrol/commit/6e0563ae338b2cb24933788e4266216c7182c2cc))
 * cache user data ([0d85af9](https://github.com/openfoodfacts/nutripatrol/commit/0d85af9b57be40c33139e727c3e73b9d628754c9))
-* prevent brut force and expired cache ([a256497](https://github.com/openfoodfacts/nutripatrol/commit/a256497db12ca04716957db612a08e474d0ddac1))
+* prevent brute force and expired cache ([a256497](https://github.com/openfoodfacts/nutripatrol/commit/a256497db12ca04716957db612a08e474d0ddac1))
 * protect routes ([a92e909](https://github.com/openfoodfacts/nutripatrol/commit/a92e9099a2686b7918503c586a12101576a7264e))
 * route to paste cookie ([1324a17](https://github.com/openfoodfacts/nutripatrol/commit/1324a177a670f49a4c3c346acaa64d1028b67653))
 * setup an auth middleware ([1e21f10](https://github.com/openfoodfacts/nutripatrol/commit/1e21f1034be85e70d0425f6bc0cc4d0f74f5fec2))
