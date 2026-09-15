@@ -51,6 +51,10 @@ git clone https://github.com/openfoodfacts/nutripatrol.git
 cd nutripatrol
 ```
 
+2. create your local env
+
+Copy `.env.example` to create your `.env` file
+
 ### Run with docker containers
 
 Make docker containers
@@ -76,6 +80,35 @@ Once the application is running, you can log in with your Open Food Facts accoun
 
 ### **How to Contribute**
 
+
+## Tests
+
+The test suite lives in `tests/unit` and is made of pure unit tests: calls to
+Open Food Facts are stubbed and the endpoints run against a throwaway SQLite
+file. It needs neither a running stack nor network access, so there is no need
+for `make up` or a Postgres database.
+
+The tests are not part of the Docker image, which only carries what the API
+needs to run. Install them in a local virtualenv:
+
+```console
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+```
+
+Then run the whole suite from the repository root:
+
+```console
+pytest
+```
+
+A single file, or a single test:
+
+```console
+pytest tests/unit/test_flag_creation.py
+pytest tests/unit/test_flag_creation.py::test_the_product_revision_is_captured
+```
 
 ## Pre-Commit
 

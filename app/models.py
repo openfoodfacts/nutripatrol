@@ -3,6 +3,7 @@ from peewee import (
     DateTimeField,
     FloatField,
     ForeignKeyField,
+    IntegerField,
     Model,
     PostgresqlDatabase,
     TextField,
@@ -29,6 +30,11 @@ class TicketModel(Model):
     image_id = CharField(null=True)
     flavor = CharField(max_length=20)
     created_at = DateTimeField()
+    # Open Food Facts drops the uploader and the upload date of an image
+    # as soon as the image is deleted, so we capture them while the image
+    # still exists, when a moderator closes the ticket.
+    image_uploader = TextField(null=True, index=True)
+    image_uploaded_at = DateTimeField(null=True)
 
     class Meta:
         database = db
@@ -59,6 +65,11 @@ class FlagModel(Model):
     flavor = CharField(max_length=20)
     reason = TextField(null=True)
     comment = TextField(null=True)
+    # Revision of the Open Food Facts product at the time the flag was raised,
+    # captured on creation so that a moderator knows which product version the
+    # flagger was looking at. Null when the flag is not about a product, or
+    # when Open Food Facts could not be reached.
+    product_revision = IntegerField(null=True)
     created_at = DateTimeField()
 
     class Meta:
