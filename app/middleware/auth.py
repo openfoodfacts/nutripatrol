@@ -80,7 +80,7 @@ async def auth_dependency(request: Request, user_status: UserStatus):
         ).hexdigest()
         if hashed_token != hashed_env_token:
             raise HTTPException(status_code=403, detail="Invalid bearer token")
-        return  # If the token is valid, we just return
+        return {"user_id": "unknown"}  # If the token is valid, we just return
 
     # If no bearer token is provided, we check for session cookie
     # Check for session cookie
@@ -104,6 +104,16 @@ async def auth_dependency(request: Request, user_status: UserStatus):
     elif user_status == UserStatus.isLoggedIn:
         if user_data.get("moderator") is None:
             raise HTTPException(status_code=403, detail="User is not logged in")
+
+    normalized_user_data = dict(user_data)
+    user_id = normalized_user_data.get("user_id")
+    if user_id is None:
+        user_id = normalized_user_data.get("userid")
+    if user_id is None:
+        user_id = normalized_user_data.get("name")
+    normalized_user_data["user_id"] = user_id or "unknown"
+
+    return normalized_user_data
 
 
 @cache(key_builder=generate_cache_key, namespace="user-data", expire=60 * 60)
