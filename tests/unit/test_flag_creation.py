@@ -268,3 +268,67 @@ def test_a_misspelled_field_is_reported(database, logged_in, snapshot):
 
     assert response.status_code == 422
     assert "comments" in response.text
+
+
+@pytest.mark.parametrize("status", ["closed-no-issue", "closed-fixed"])
+def test_a_ticket_can_be_closed_with_an_outcome(
+    database, moderator, snapshot, uploader, status
+):
+    """The two outcomes a moderator can record are accepted, and stored as such."""
+    snapshot(revision=42)
+    uploader((None, None))
+    ticket_id = post_flag().json()["ticket_id"]
+
+    response = request("PUT", f"/api/v1/tickets/{ticket_id}/status?status={status}")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == status
+    assert TicketModel.get_by_id(ticket_id).status == status
+    # And the moderator action records which of the two it was.
+    action = ModeratorActionModel.select().where(
+        ModeratorActionModel.ticket == ticket_id
+    )[0]
+    assert action.action_type == status
+
+
+@pytest.mark.parametrize("status", ["closed", "closed-no-issue", "closed-fixed"])
+def test_a_new_flag_reopens_a_ticket_closed_with_any_outcome(
+    database, moderator, snapshot, uploader, status
+):
+    snapshot(revision=42)
+    uploader((None, None))
+    ticket_id = post_flag().json()["ticket_id"]
+    request("PUT", f"/api/v1/tickets/{ticket_id}/status?status={status}")
+
+    response = post_flag(reason="inappropriate")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["ticket_id"] == ticket_id
+    assert TicketModel.get_by_id(ticket_id).status == "open"
+
+
+@pytest.mark.parametrize("status", ["closed-no-issue", "closed-fixed"])
+def test_tickets_can_be_filtered_by_a_closing_outcome(
+    database, moderator, snapshot, uploader, status
+):
+    """Each outcome filters on its own: `closed` no longer covers them all."""
+    snapshot(revision=42)
+    uploader((None, None))
+    ticket_id = post_flag().json()["ticket_id"]
+    request("PUT", f"/api/v1/tickets/{ticket_id}/status?status={status}")
+
+    matching = request("GET", f"/api/v1/tickets?status={status}")
+    plain_closed = request("GET", "/api/v1/tickets?status=closed")
+
+    assert matching.status_code == 200, matching.text
+    assert [ticket["id"] for ticket in matching.json()["tickets"]] == [ticket_id]
+    assert plain_closed.json()["tickets"] == []
+
+
+def test_an_unknown_status_is_still_rejected(database, moderator, snapshot):
+    snapshot(revision=42)
+    ticket_id = post_flag().json()["ticket_id"]
+
+    response = request("PUT", f"/api/v1/tickets/{ticket_id}/status?status=closed-oops")
+
+    assert response.status_code == 422, response.text

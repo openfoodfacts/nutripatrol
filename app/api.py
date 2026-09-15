@@ -65,7 +65,7 @@ A ticket containes the following main fields:
 
 - `type`: Type of the issue. It can be `product`, `image` or `search`.
 - `url`: URL of the product or of the flagged image.
-- `status`: Status of the ticket. It can be `open` or `closed`.
+- `status`: Status of the ticket. It can be `open`, `closed-no-issue` (the flagged content was fine as it was), `closed-fixed` (the issue was corrected), or `closed` (closed without recording which of the two it was).
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
 - `image_uploader` and `image_uploaded_at`: Open Food Facts User ID of the user who uploaded the flagged image, and upload date. Open Food Facts loses them once the image is deleted, so they are captured when the ticket is created, and captured again when a moderator closes it if they could not be read then. They are null if the image had already been deleted by then.
@@ -141,6 +141,21 @@ def _get_device_id(request: Request):
 class TicketStatus(StrEnum):
     open = auto()
     closed = auto()
+    # The two outcomes a moderator can record when closing a ticket: the
+    # flagged content was fine as it was, or it was and has been corrected.
+    # `closed` predates them and is kept for the tickets already stored with
+    # it, and for clients that do not tell the two apart.
+    closed_no_issue = "closed-no-issue"
+    closed_fixed = "closed-fixed"
+
+
+CLOSED_TICKET_STATUSES = frozenset(
+    {
+        TicketStatus.closed,
+        TicketStatus.closed_no_issue,
+        TicketStatus.closed_fixed,
+    }
+)
 
 
 class IssueType(StrEnum):
@@ -412,7 +427,7 @@ def create_flag(
                 ),
                 snapshot,
             )
-        elif ticket.status == TicketStatus.closed:
+        elif ticket.status in CLOSED_TICKET_STATUSES:
             # Reopen the ticket if it was closed
             ticket.status = TicketStatus.open
             ticket.save()
