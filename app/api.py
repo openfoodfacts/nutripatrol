@@ -18,6 +18,8 @@ from openfoodfacts.utils import URLBuilder, get_logger
 from peewee import DoesNotExist, fn
 from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, Field, model_validator
+from app.listener.update_listener import main as run_listener
+from openfoodfacts.redis import get_redis_client
 
 from app.config import settings
 from app.middleware.auth import UserStatus, get_auth_dependency
@@ -61,6 +63,10 @@ A ticket containes the following main fields:
 
 
 """
+
+if __name__ == "__main__":
+    run_listener()
+redis = get_redis_client(host="localhost", port=6379, db=0)
 
 app = FastAPI(
     title="nutripatrol",
