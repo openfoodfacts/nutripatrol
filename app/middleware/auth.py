@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import os
 from enum import StrEnum, auto
+from typing import NamedTuple
 from urllib.parse import urlparse, urlunparse
 
 import httpx
@@ -114,6 +115,33 @@ async def auth_dependency(request: Request, user_status: UserStatus) -> str:
     if not user_id:
         logger.warning("auth.pl returned no user_id for an authenticated session")
     return user_id
+
+
+class ModeratorSession(NamedTuple):
+    """A moderator, and the session we act on their behalf with."""
+
+    user_id: str
+    session_cookie: str
+
+
+async def moderator_session(request: Request) -> ModeratorSession:
+    """Authenticate a moderator and return their Open Food Facts session.
+
+    Used by the endpoints that write to Open Food Facts on the moderator's
+    behalf: they need the session cookie itself, not just the user id, so that
+    Open Food Facts applies its own permission checks and attributes the edit
+    to the moderator. This rules out the Robotoff bearer token, which
+    authenticates a machine with no Open Food Facts session behind it.
+    """
+    user_id = await auth_dependency(request, UserStatus.isModerator)
+    session_cookie = request.cookies.get("session")
+    if not session_cookie:
+        raise HTTPException(
+            status_code=401,
+            detail="This action is performed on Open Food Facts on your behalf, "
+            "and requires an Open Food Facts session cookie",
+        )
+    return ModeratorSession(user_id, session_cookie)
 
 
 @cache(key_builder=generate_cache_key, namespace="user-data", expire=60 * 60)

@@ -23,6 +23,7 @@ from app.config import settings
 from app.middleware.auth import UserStatus, get_auth_dependency
 from app.models import FlagModel, ModeratorActionModel, TicketModel, db
 from app.moderation_api import off_api_error_handler
+from app.moderation_api import router as moderation_router
 from app.off_api import (
     OFFAPIError,
     ProductSnapshot,
@@ -67,7 +68,20 @@ A ticket containes the following main fields:
 - `status`: Status of the ticket. It can be `open` or `closed`.
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
-- `image_uploader` and `image_uploaded_at`: Open Food Facts User ID of the user who uploaded the flagged image, and upload date. Open Food Facts loses them once the image is deleted, so they are captured when a moderator closes the ticket, and are null if the image had already been deleted by then.
+- `image_uploader` and `image_uploaded_at`: Open Food Facts User ID of the user who uploaded the flagged image, and upload date. Open Food Facts loses them once the image is deleted, so they are captured when the ticket is created, and captured again when a moderator closes it if they could not be read then. They are null if the image had already been deleted by then.
+
+## Moderation actions
+
+Closing a ticket only records what a moderator decided; acting on it means editing Open Food Facts. The `/products/{barcode}/...` endpoints do that server-side, so that a client does not have to know the Open Food Facts endpoints, which flavor a product lives on, or how each of them reports a failure:
+
+- `POST /products/{barcode}/images/delete`: move flagged images to the Open Food Facts trash.
+- `POST /products/{barcode}/images/move`: move images to another product, for an image uploaded on the wrong barcode.
+- `POST /products/{barcode}/delete`: delete a product page.
+- `POST /products/{barcode}/change_barcode`: give a product another barcode.
+- `PATCH /products/{barcode}`: edit product fields.
+- `POST /products/{barcode}/obsolete`: mark a product as no longer sold, or un-mark it.
+
+They are all performed **on behalf of the moderator**: their Open Food Facts session cookie is forwarded, so Open Food Facts applies its own permission checks and records the edit under their name. They therefore require a session cookie, and cannot be called with the Robotoff bearer token.
 
 """
 
@@ -817,6 +831,10 @@ if auth_server_static and auth_server_static != "":
         response.set_cookie(key="session", value=body.session)
         return response
 
+
+# Acting on Open Food Facts lives in its own module; its routes are part of
+# the same /api/v1 surface, and its failures are reported like any other.
+api_v1_router.include_router(moderation_router)
 app.add_exception_handler(OFFAPIError, off_api_error_handler)
 
 app.include_router(api_v1_router)
