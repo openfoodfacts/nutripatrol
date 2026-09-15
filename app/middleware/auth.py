@@ -72,15 +72,28 @@ async def auth_dependency(request: Request, user_status: UserStatus):
     # Currently, this is only for robotoff
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
-        # Check if hashed token matches the env variable
         token = auth_header.split(" ")[1]
+        
+        # 1. Check if it's the Robotoff token
         hashed_token = hashlib.sha256(token.encode()).hexdigest()
-        hashed_env_token = hashlib.sha256(
-            os.getenv("AUTH_BEARER_TOKEN_ROBOTOFF").encode()
-        ).hexdigest()
-        if hashed_token != hashed_env_token:
+        env_token = os.getenv("AUTH_BEARER_TOKEN_ROBOTOFF")
+        if env_token:
+            hashed_env_token = hashlib.sha256(env_token.encode()).hexdigest()
+            if hashed_token == hashed_env_token:
+                return  # If the token is valid robotoff token, we just return
+
+        # 2. Check if it's a Keycloak token
+        keycloak_url = os.getenv("KEYCLOAK_URL", "https://auth.openfoodfacts.org/realms/openfoodfacts")
+        try:
+            user_data = await _get_user_data_keycloak_cached(token, keycloak_url)
+            if user_status == UserStatus.isLoggedIn:
+                return
+            if user_status == UserStatus.isModerator:
+                if user_data.get("moderator") != 1:
+                    raise HTTPException(status_code=403, detail="User is not a moderator")
+                return
+        except HTTPException:
             raise HTTPException(status_code=403, detail="Invalid bearer token")
-        return  # If the token is valid, we just return
 
     # If no bearer token is provided, we check for session cookie
     # Check for session cookie
@@ -122,3 +135,20 @@ async def _fetch_user_data(session_cookie: str, auth_base_url: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid session token")
 
     return response.json().get("user", {})
+
+@cache(key_builder=generate_cache_key, namespace="keycloak-user-data", expire=60 * 60)
+async def _get_user_data_keycloak_cached(token: str, keycloak_url: str) -> dict:
+    return await _fetch_user_data_keycloak(token, keycloak_url)
+
+
+async def _fetch_user_data_keycloak(token: str, keycloak_url: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{keycloak_url}/protocol/openid-connect/userinfo",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid Keycloak token")
+
+    return response.json()
