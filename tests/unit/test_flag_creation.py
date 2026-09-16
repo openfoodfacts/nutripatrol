@@ -274,7 +274,7 @@ def test_a_misspelled_field_is_reported(database, logged_in, snapshot):
 def test_a_ticket_can_be_closed_with_an_outcome(
     database, moderator, snapshot, uploader, status
 ):
-    """The two outcomes a moderator can record are accepted, and stored as such."""
+    """The two outcomes a moderator can record are accepted, and stored."""
     snapshot(revision=42)
     uploader((None, None))
     ticket_id = post_flag().json()["ticket_id"]

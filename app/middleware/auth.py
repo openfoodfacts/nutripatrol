@@ -64,6 +64,13 @@ def get_auth_server(request: Request):
 # auth_url would be something like 'https://world.openfoodfacts.net/'
 
 
+class AuthenticatedUser(NamedTuple):
+    """The user a request acts as, and whether they moderate."""
+
+    user_id: str
+    is_moderator: bool
+
+
 def get_auth_dependency(user_status: UserStatus):
     async def wrapper(request: Request) -> str:
         return await auth_dependency(request, user_status)
@@ -71,8 +78,28 @@ def get_auth_dependency(user_status: UserStatus):
     return wrapper
 
 
+async def authenticated_user(request: Request) -> AuthenticatedUser:
+    """Authenticate any logged-in user, and report whether they moderate.
+
+    Used by the endpoints that serve both kinds of user rather than turning
+    one of them away: a moderator sees every flag and ticket, while a plain
+    user only sees the flags they raised themselves, and the tickets those
+    flags are attached to.
+    """
+    return await _authenticate(request, UserStatus.isLoggedIn)
+
+
 async def auth_dependency(request: Request, user_status: UserStatus) -> str:
     """Authenticate the request and return the acting user's id."""
+    return (await _authenticate(request, user_status)).user_id
+
+
+async def _authenticate(request: Request, user_status: UserStatus) -> AuthenticatedUser:
+    """Authenticate the request against `user_status`, or raise.
+
+    Returns who the request acts as, so that a caller which accepts several
+    kinds of user can tell them apart afterwards.
+    """
     # Check for bearer token in Authorization header
     # Currently, this is only for robotoff
     auth_header = request.headers.get("Authorization")
@@ -85,7 +112,11 @@ async def auth_dependency(request: Request, user_status: UserStatus) -> str:
         ).hexdigest()
         if hashed_token != hashed_env_token:
             raise HTTPException(status_code=403, detail="Invalid bearer token")
-        return "robotoff"  # If the token is valid, we just return
+        # The bearer token skips the `user_status` check entirely, so it has
+        # always satisfied `isModerator` as well: it is reported as a
+        # moderator so that the endpoints which filter on that keep serving
+        # Robotoff everything, as they did before they could tell.
+        return AuthenticatedUser("robotoff", is_moderator=True)
 
     # If no bearer token is provided, we check for session cookie
     # Check for session cookie
@@ -102,9 +133,10 @@ async def auth_dependency(request: Request, user_status: UserStatus) -> str:
 
     auth_response = await _get_user_data_cached(session_cookie, auth_base_url)
     user_data = auth_response.get("user", {})
+    is_moderator = user_data.get("moderator") == 1
 
     if user_status == UserStatus.isModerator:
-        if user_data.get("moderator") != 1:
+        if not is_moderator:
             raise HTTPException(status_code=403, detail="User is not a moderator")
 
     elif user_status == UserStatus.isLoggedIn:
@@ -114,7 +146,7 @@ async def auth_dependency(request: Request, user_status: UserStatus) -> str:
     user_id = auth_response.get("user_id", "")
     if not user_id:
         logger.warning("auth.pl returned no user_id for an authenticated session")
-    return user_id
+    return AuthenticatedUser(user_id, is_moderator)
 
 
 class ModeratorSession(NamedTuple):

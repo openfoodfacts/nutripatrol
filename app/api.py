@@ -20,7 +20,12 @@ from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.config import settings
-from app.middleware.auth import UserStatus, get_auth_dependency
+from app.middleware.auth import (
+    AuthenticatedUser,
+    UserStatus,
+    authenticated_user,
+    get_auth_dependency,
+)
 from app.models import FlagModel, ModeratorActionModel, TicketModel, db
 from app.moderation_api import off_api_error_handler
 from app.moderation_api import router as moderation_router
@@ -82,6 +87,16 @@ Closing a ticket only records what a moderator decided; acting on it means editi
 - `POST /products/{barcode}/obsolete`: mark a product as no longer sold, or un-mark it.
 
 They are all performed **on behalf of the moderator**: their Open Food Facts session cookie is forwarded, so Open Food Facts applies its own permission checks and records the edit under their name. They therefore require a session cookie, and cannot be called with the Robotoff bearer token.
+
+## Who sees what
+
+Every endpoint requires an Open Food Facts session. Moderators see everything. Any other logged-in user follows their own reports, and only those:
+
+- `GET /flags` and `GET /flags/{flag_id}`: the flags they raised. Someone else's flag answers `404`, the same as a flag that does not exist.
+- `GET /tickets` and `GET /tickets/{ticket_id}`: the tickets one of their flags is attached to. A ticket gathers the flags of everyone who reported the same product or image, so reaching it through one's own flag does not hand over the others: `POST /flags/batch` returns, of a shared ticket, only the caller's own flag.
+- `GET /tickets/{ticket_id}/actions`: the moderation history of those tickets, so that a flagger can see what was done about their report.
+
+Closing a ticket, and everything under `/products/{barcode}/...`, stays with the moderators, as do `GET /stats` and `GET /moderator_actions/me`.
 
 """
 
@@ -442,35 +457,77 @@ def create_flag(
         )
 
 
+def _authorize_ticket_access(ticket_id: int, user: AuthenticatedUser) -> None:
+    """Refuse a plain user a ticket that none of their own flags opened.
+
+    A ticket gathers the flags of everyone who reported the same product or
+    image, so reaching it through one's own flag must not hand over the
+    others: it is only the ticket itself, and its moderation history, that a
+    flagger gets to follow.
+    """
+    if user.is_moderator:
+        return
+    own_flag = (
+        FlagModel.select()
+        .where(FlagModel.ticket == ticket_id, FlagModel.user_id == user.user_id)
+        .exists()
+    )
+    if not own_flag:
+        # 404 rather than 403, as with a flag: which products other users
+        # have reported is not something a flagger gets to probe for.
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def _flag_as_response(flag: FlagModel) -> dict:
+    """Render a flag the way the API describes it.
+
+    peewee names a foreign key after the Python attribute -- "ticket" -- while
+    a flag is published with the "ticket_id" of its ticket, so the raw rows
+    cannot be handed to the response model as they come.
+    """
+    data = model_to_dict(flag, recurse=False)
+    data["ticket_id"] = data.pop("ticket")
+    return data
+
+
 class GetFlagsResponse(BaseModel):
     flags: list[Flag]
 
 
 @api_v1_router.get("/flags")
 def get_flags(
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetFlagsResponse:
     """Get all flags.
 
-    This function is used to get all flags.
+    A moderator gets every flag. Any other logged-in user gets the flags they
+    raised themselves, and only those.
     """
     with db:
-        return GetFlagsResponse(flags=list(FlagModel.select().dicts()))
+        query = FlagModel.select()
+        if not user.is_moderator:
+            query = query.where(FlagModel.user_id == user.user_id)
+        return GetFlagsResponse(flags=[_flag_as_response(flag) for flag in query])
 
 
 @api_v1_router.get("/flags/{flag_id}")
 def get_flag(
-    flag_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+    flag_id: int, user: AuthenticatedUser = Depends(authenticated_user)
 ) -> Flag:
     """Get a flag by ID.
 
-    This function is used to get a flag by its ID.
+    A flag is readable by its author and by the moderators. For anyone else
+    it answers 404, the same as a flag that does not exist: that someone
+    reported a given product is itself part of what the flag discloses.
     """
     with db:
         try:
-            return FlagModel.get_by_id(flag_id)
+            flag = FlagModel.get_by_id(flag_id)
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Not found")
+        if not user.is_moderator and flag.user_id != user.user_id:
+            raise HTTPException(status_code=404, detail="Not found")
+        return flag
 
 
 def _create_ticket(ticket: TicketCreate, snapshot: ProductSnapshot):
@@ -513,11 +570,12 @@ def get_tickets(
     sort_order: Literal["asc", "desc"] = "desc",
     page: int = 1,
     page_size: int = 10,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetTicketsResponse:
     """Get all tickets.
 
-    This function is used to get all tickets with status open.
+    A moderator lists every ticket. Any other logged-in user lists only the
+    tickets one of their own flags is attached to.
     """
     if sort_by not in TICKET_SORTABLE_FIELDS:
         raise HTTPException(
@@ -536,10 +594,15 @@ def get_tickets(
             where_clause.append(TicketModel.type == type_)
         if flavor:
             where_clause.append(TicketModel.flavor == flavor)
+        # Both the tickets a plain user may see and the `reason` filter
+        # select tickets through their flags, so they go through the same
+        # subquery -- which also keeps a plain user from matching a ticket on
+        # the reason someone else gave.
+        flag_clause = [] if user.is_moderator else [FlagModel.user_id == user.user_id]
         if reason:
-            subquery = FlagModel.select(FlagModel.ticket_id).where(
-                FlagModel.reason.in_(reason)
-            )
+            flag_clause.append(FlagModel.reason.in_(reason))
+        if flag_clause:
+            subquery = FlagModel.select(FlagModel.ticket_id).where(*flag_clause)
             where_clause.append(TicketModel.id.in_(subquery))
 
         # peewee's .where() raises on zero arguments (reduce() of an empty
@@ -568,13 +631,14 @@ def get_tickets(
 
 @api_v1_router.get("/tickets/{ticket_id}")
 def get_ticket(
-    ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+    ticket_id: int, user: AuthenticatedUser = Depends(authenticated_user)
 ) -> Ticket:
     """Get a ticket by ID.
 
-    This function is used to get a ticket by its ID.
+    Readable by the moderators, and by the users who flagged it.
     """
     with db:
+        _authorize_ticket_access(ticket_id, user)
         try:
             return model_to_dict(TicketModel.get_by_id(ticket_id))
         except DoesNotExist:
@@ -584,18 +648,21 @@ def get_ticket(
 @api_v1_router.post("/flags/batch")
 def get_flags_by_ticket_batch(
     flag_request: FlagsByTicketIdRequest,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ):
     """Get all flags for tickets by IDs.
 
-    This function is used to get all flags for tickets by there IDs.
+    A moderator gets every flag on those tickets. Any other logged-in user
+    gets only their own, so a ticket they flagged comes back holding their
+    flag alone. A ticket they did not flag is simply absent from the answer.
     """
     with db:
-        flags = list(
-            FlagModel.select()
-            .where(FlagModel.ticket_id.in_(flag_request.ticket_ids))
-            .dicts()
+        query = FlagModel.select().where(
+            FlagModel.ticket_id.in_(flag_request.ticket_ids)
         )
+        if not user.is_moderator:
+            query = query.where(FlagModel.user_id == user.user_id)
+        flags = list(query.dicts())
 
     ticket_id_to_flags = defaultdict(list)
     for flag in flags:
@@ -707,10 +774,15 @@ def get_ticket_actions(
     ticket_id: int,
     page: int = 1,
     page_size: int = 10,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetModeratorActionsResponse:
-    """Get the moderation history of a ticket, most recent first."""
+    """Get the moderation history of a ticket, most recent first.
+
+    Readable by the moderators, and by the users who flagged the ticket: what
+    was done about a report is answered to whoever made it.
+    """
     with db:
+        _authorize_ticket_access(ticket_id, user)
         return _list_moderator_actions(
             [ModeratorActionModel.ticket == ticket_id], page, page_size
         )
