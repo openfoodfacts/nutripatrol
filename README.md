@@ -51,6 +51,10 @@ git clone https://github.com/openfoodfacts/nutripatrol.git
 cd nutripatrol
 ```
 
+2. create your local env
+
+Copy `.env.example` to create your `.env` file
+
 ### Run with docker containers
 
 Make docker containers
@@ -61,6 +65,44 @@ make up
 
 Your local instance of NutriPatrol should now be running at http://localhost:3000.
 ### Authentication for local dev
+
+### Switching between users in local dev
+
+The Open Food Facts session cookie is set on an `openfoodfacts` host, so a
+front end served from `localhost` never gets one - which leaves every local
+request anonymous, and the parts of the API that tell users apart impossible
+to exercise: a moderator lists every ticket and flag, anyone else only the
+flags they raised and the tickets those are attached to.
+
+Set `AUTH_DEV_USERS=1` in `.env` and a request can name the user it acts as
+instead:
+
+| Header | Meaning |
+|---|---|
+| `X-Dev-User-Id: <user id>` | Act as that Open Food Facts user id |
+| `X-Dev-Moderator: 1` | ...and as a moderator |
+
+Sending neither header leaves the request anonymous, as before - which is how
+a logged-out visitor is tested. The headers are still subject to the usual
+permission checks: without `X-Dev-Moderator`, the moderator-only endpoints
+answer 403, exactly as they would for a real account.
+
+```console
+curl -H "X-Dev-User-Id: alice" http://localhost:8000/api/v1/tickets   # alice's own tickets
+curl -H "X-Dev-User-Id: bob" -H "X-Dev-Moderator: 1" \
+     http://localhost:8000/api/v1/tickets                             # every ticket
+```
+
+The NutriPatrol front end sends these for you: its login page, in dev mode,
+offers the same three choices (see `nutripatrol-frontend`).
+
+The one thing this cannot fake is `/products/{barcode}/...`, which edits Open
+Food Facts on the moderator's behalf and forwards their real session cookie -
+those endpoints answer 401 without one, and need the setup below.
+
+**`AUTH_DEV_USERS` is impersonation by header**: any caller can claim any user
+id, and moderator rights with it. It must stay unset outside a developer's own
+machine.
 
 ### To test with a global instance of Product Opener
 
@@ -76,6 +118,35 @@ Once the application is running, you can log in with your Open Food Facts accoun
 
 ### **How to Contribute**
 
+
+## Tests
+
+The test suite lives in `tests/unit` and is made of pure unit tests: calls to
+Open Food Facts are stubbed and the endpoints run against a throwaway SQLite
+file. It needs neither a running stack nor network access, so there is no need
+for `make up` or a Postgres database.
+
+The tests are not part of the Docker image, which only carries what the API
+needs to run. Install them in a local virtualenv:
+
+```console
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+```
+
+Then run the whole suite from the repository root:
+
+```console
+pytest
+```
+
+A single file, or a single test:
+
+```console
+pytest tests/unit/test_flag_creation.py
+pytest tests/unit/test_flag_creation.py::test_the_product_revision_is_captured
+```
 
 ## Pre-Commit
 

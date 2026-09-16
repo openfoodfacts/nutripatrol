@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum, auto
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,11 +17,24 @@ from openfoodfacts.images import generate_image_url
 from openfoodfacts.utils import URLBuilder, get_logger
 from peewee import DoesNotExist, fn
 from playhouse.shortcuts import model_to_dict
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.config import settings
-from app.middleware.auth import UserStatus, get_auth_dependency
-from app.models import FlagModel, TicketModel, db
+from app.middleware.auth import (
+    AuthenticatedUser,
+    UserStatus,
+    authenticated_user,
+    get_auth_dependency,
+)
+from app.models import FlagModel, ModeratorActionModel, TicketModel, db
+from app.moderation_api import off_api_error_handler
+from app.moderation_api import router as moderation_router
+from app.off_api import (
+    OFFAPIError,
+    ProductSnapshot,
+    fetch_image_upload_metadata,
+    fetch_product_snapshot,
+)
 from app.utils import init_sentry
 
 logger = get_logger(level=settings.log_level.to_int())
@@ -46,6 +59,8 @@ A flag containes the following main fields:
 
 `image_to_delete_spam` or `image_to_delete_face`. For products it can be `product_to_delete`. The field is optional.
 - `comment`: Comment provided by the user during flagging. This is a free text field.
+- `created_at`: Creation datetime of the flag, in UTC. It is stamped by the server when the flag is saved, and is not accepted in the request body.
+- `product_revision`: Revision of the Open Food Facts product when the flag was created. Open Food Facts only serves the current revision of a product, so it is captured when the flag is created, and tells a moderator which product version the flagger was looking at. It is null for a search flag, and if Open Food Facts could not be reached.
 
 ## Tickets
 Automatically created when a flag is created and no ticket exists for the product or image.
@@ -55,10 +70,33 @@ A ticket containes the following main fields:
 
 - `type`: Type of the issue. It can be `product`, `image` or `search`.
 - `url`: URL of the product or of the flagged image.
-- `status`: Status of the ticket. It can be `open` or `closed`.
+- `status`: Status of the ticket. It can be `open`, `closed-no-issue` (the flagged content was fine as it was), `closed-fixed` (the issue was corrected), or `closed` (closed without recording which of the two it was).
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
+- `image_uploader` and `image_uploaded_at`: Open Food Facts User ID of the user who uploaded the flagged image, and upload date. Open Food Facts loses them once the image is deleted, so they are captured when the ticket is created, and captured again when a moderator closes it if they could not be read then. They are null if the image had already been deleted by then.
 
+## Moderation actions
+
+Closing a ticket only records what a moderator decided; acting on it means editing Open Food Facts. The `/products/{barcode}/...` endpoints do that server-side, so that a client does not have to know the Open Food Facts endpoints, which flavor a product lives on, or how each of them reports a failure:
+
+- `POST /products/{barcode}/images/delete`: move flagged images to the Open Food Facts trash.
+- `POST /products/{barcode}/images/move`: move images to another product, for an image uploaded on the wrong barcode.
+- `POST /products/{barcode}/delete`: delete a product page.
+- `POST /products/{barcode}/change_barcode`: give a product another barcode.
+- `PATCH /products/{barcode}`: edit product fields.
+- `POST /products/{barcode}/obsolete`: mark a product as no longer sold, or un-mark it.
+
+They are all performed **on behalf of the moderator**: their Open Food Facts session cookie is forwarded, so Open Food Facts applies its own permission checks and records the edit under their name. They therefore require a session cookie, and cannot be called with the Robotoff bearer token.
+
+## Who sees what
+
+Every endpoint requires an Open Food Facts session. Moderators see everything. Any other logged-in user follows their own reports, and only those:
+
+- `GET /flags` and `GET /flags/{flag_id}`: the flags they raised. Someone else's flag answers `404`, the same as a flag that does not exist.
+- `GET /tickets` and `GET /tickets/{ticket_id}`: the tickets one of their flags is attached to. A ticket gathers the flags of everyone who reported the same product or image, so reaching it through one's own flag does not hand over the others: `POST /flags/batch` returns, of a shared ticket, only the caller's own flag.
+- `GET /tickets/{ticket_id}/actions`: the moderation history of those tickets, so that a flagger can see what was done about their report.
+
+Closing a ticket, and everything under `/products/{barcode}/...`, stays with the moderators, as do `GET /stats` and `GET /moderator_actions/me`.
 
 """
 
@@ -118,6 +156,21 @@ def _get_device_id(request: Request):
 class TicketStatus(StrEnum):
     open = auto()
     closed = auto()
+    # The two outcomes a moderator can record when closing a ticket: the
+    # flagged content was fine as it was, or it was and has been corrected.
+    # `closed` predates them and is kept for the tickets already stored with
+    # it, and for clients that do not tell the two apart.
+    closed_no_issue = "closed-no-issue"
+    closed_fixed = "closed-fixed"
+
+
+CLOSED_TICKET_STATUSES = frozenset(
+    {
+        TicketStatus.closed,
+        TicketStatus.closed_no_issue,
+        TicketStatus.closed_fixed,
+    }
+)
 
 
 class IssueType(StrEnum):
@@ -167,6 +220,15 @@ class TicketCreate(BaseModel):
 
 class Ticket(TicketCreate):
     id: int = Field(..., description="ID of the ticket")
+    image_uploader: str | None = Field(
+        None,
+        description="Open Food Facts User ID of the user who uploaded the flagged "
+        "image. Can be null if the ticket is not about an image, or if the image had "
+        "already been deleted by then.",
+    )
+    image_uploaded_at: datetime | None = Field(
+        None, description="Upload datetime of the flagged image"
+    )
 
 
 class SourceType(StrEnum):
@@ -176,6 +238,13 @@ class SourceType(StrEnum):
 
 
 class FlagCreate(BaseModel):
+    # What a flag records about itself -- when it was created, which product
+    # revision it was raised on -- is assigned by the server, and a client
+    # cannot pass it. Unknown fields are refused rather than dropped, so that
+    # trying to (or misspelling `comment`) is an error the caller sees,
+    # instead of data quietly going missing.
+    model_config = ConfigDict(extra="forbid")
+
     barcode: str | None = Field(
         None,
         description="Barcode of the product, if the flag is about a product or a product image. "
@@ -213,9 +282,6 @@ class FlagCreate(BaseModel):
     comment: str | None = Field(
         None,
         description="Comment provided by the user during flagging. This is a free text field.",
-    )
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow, description="Creation datetime of the flag"
     )
 
     @model_validator(mode="after")
@@ -275,10 +341,48 @@ class Flag(FlagCreate):
     id: int = Field(..., description="ID of the flag")
     ticket_id: int = Field(..., description="ID of the ticket associated with the flag")
     device_id: str = Field(..., description="Device ID of the flagger")
+    product_revision: int | None = Field(
+        None,
+        description="Revision of the Open Food Facts product when the flag was "
+        "created. It is captured from Open Food Facts on creation, and is null "
+        "if the flag is not about a product, or if Open Food Facts could not be "
+        "reached.",
+    )
+    created_at: datetime = Field(
+        ...,
+        description="Creation datetime of the flag, in UTC. It is stamped by "
+        "the server when the flag is saved: a client cannot set it.",
+    )
 
 
 class FlagsByTicketIdRequest(BaseModel):
     ticket_ids: list[int]
+
+
+def _flagged_image_id(item: FlagCreate | TicketCreate | TicketModel) -> str | None:
+    """Return the id of the image a flag or a ticket is about, if any."""
+    if item.type != IssueType.image or not item.barcode or not item.image_id:
+        return None
+    return item.image_id
+
+
+def _capture_product_snapshot(flag: FlagCreate, with_image: bool) -> ProductSnapshot:
+    """Read what the flag records about its product, in a single request.
+
+    Recorded on creation because Open Food Facts only serves the current
+    revision of a product: afterwards, neither the revision the flag was
+    raised on nor the uploader of a since-deleted image can be recovered.
+
+    `with_image` is false when the flag joins a ticket that already holds the
+    image metadata, which then costs nothing to leave out of the request.
+
+    Best effort: a search flag has no product to look up, and an Open Food
+    Facts failure must not prevent the flag from being saved.
+    """
+    if not flag.barcode:
+        return ProductSnapshot()
+    image_id = _flagged_image_id(flag) if with_image else None
+    return fetch_product_snapshot(flag.barcode, flag.flavor, image_id)
 
 
 @api_v1_router.post("/flags")
@@ -321,6 +425,11 @@ def create_flag(
             TicketModel.type == flag.type,
             TicketModel.flavor == flag.flavor,
         )
+        # Everything this flag captures from Open Food Facts comes from this
+        # one product fetch: the revision it was raised on, and -- only when it
+        # opens a ticket, which is what holds them -- the image upload details.
+        snapshot = _capture_product_snapshot(flag, with_image=ticket is None)
+
         # If no ticket found, create a new one
         if ticket is None:
             ticket = _create_ticket(
@@ -330,15 +439,55 @@ def create_flag(
                     type=flag.type,
                     flavor=flag.flavor,
                     image_id=flag.image_id,
-                )
+                ),
+                snapshot,
             )
-        elif ticket.status == TicketStatus.closed:
+        elif ticket.status in CLOSED_TICKET_STATUSES:
             # Reopen the ticket if it was closed
             ticket.status = TicketStatus.open
             ticket.save()
 
         device_id = _get_device_id(request)
-        return FlagModel.create(ticket=ticket, device_id=device_id, **flag.model_dump())
+        return FlagModel.create(
+            ticket=ticket,
+            device_id=device_id,
+            product_revision=snapshot.revision,
+            created_at=datetime.utcnow(),
+            **flag.model_dump(),
+        )
+
+
+def _authorize_ticket_access(ticket_id: int, user: AuthenticatedUser) -> None:
+    """Refuse a plain user a ticket that none of their own flags opened.
+
+    A ticket gathers the flags of everyone who reported the same product or
+    image, so reaching it through one's own flag must not hand over the
+    others: it is only the ticket itself, and its moderation history, that a
+    flagger gets to follow.
+    """
+    if user.is_moderator:
+        return
+    own_flag = (
+        FlagModel.select()
+        .where(FlagModel.ticket == ticket_id, FlagModel.user_id == user.user_id)
+        .exists()
+    )
+    if not own_flag:
+        # 404 rather than 403, as with a flag: which products other users
+        # have reported is not something a flagger gets to probe for.
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def _flag_as_response(flag: FlagModel) -> dict:
+    """Render a flag the way the API describes it.
+
+    peewee names a foreign key after the Python attribute -- "ticket" -- while
+    a flag is published with the "ticket_id" of its ticket, so the raw rows
+    cannot be handed to the response model as they come.
+    """
+    data = model_to_dict(flag, recurse=False)
+    data["ticket_id"] = data.pop("ticket")
+    return data
 
 
 class GetFlagsResponse(BaseModel):
@@ -347,34 +496,47 @@ class GetFlagsResponse(BaseModel):
 
 @api_v1_router.get("/flags")
 def get_flags(
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetFlagsResponse:
     """Get all flags.
 
-    This function is used to get all flags.
+    A moderator gets every flag. Any other logged-in user gets the flags they
+    raised themselves, and only those.
     """
     with db:
-        return GetFlagsResponse(flags=list(FlagModel.select().dicts()))
+        query = FlagModel.select()
+        if not user.is_moderator:
+            query = query.where(FlagModel.user_id == user.user_id)
+        return GetFlagsResponse(flags=[_flag_as_response(flag) for flag in query])
 
 
 @api_v1_router.get("/flags/{flag_id}")
 def get_flag(
-    flag_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+    flag_id: int, user: AuthenticatedUser = Depends(authenticated_user)
 ) -> Flag:
     """Get a flag by ID.
 
-    This function is used to get a flag by its ID.
+    A flag is readable by its author and by the moderators. For anyone else
+    it answers 404, the same as a flag that does not exist: that someone
+    reported a given product is itself part of what the flag discloses.
     """
     with db:
         try:
-            return FlagModel.get_by_id(flag_id)
+            flag = FlagModel.get_by_id(flag_id)
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Not found")
+        if not user.is_moderator and flag.user_id != user.user_id:
+            raise HTTPException(status_code=404, detail="Not found")
+        return flag
 
 
-def _create_ticket(ticket: TicketCreate):
-    """Create a ticket."""
-    return TicketModel.create(**ticket.model_dump())
+def _create_ticket(ticket: TicketCreate, snapshot: ProductSnapshot):
+    """Create a ticket, with what the flag's product fetch captured of it."""
+    return TicketModel.create(
+        **ticket.model_dump(),
+        image_uploader=snapshot.image_uploader,
+        image_uploaded_at=snapshot.image_uploaded_at,
+    )
 
 
 class GetTicketsResponse(BaseModel):
@@ -382,6 +544,19 @@ class GetTicketsResponse(BaseModel):
 
     tickets: list[Ticket]
     max_page: int
+    total: int
+
+
+# Whitelist of ticket fields that GET /tickets can sort by. Never pass raw
+# query input to getattr()/order_by() directly.
+TICKET_SORTABLE_FIELDS = {
+    "id": TicketModel.id,
+    "barcode": TicketModel.barcode,
+    "status": TicketModel.status,
+    "type": TicketModel.type,
+    "flavor": TicketModel.flavor,
+    "created_at": TicketModel.created_at,
+}
 
 
 @api_v1_router.get("/tickets")
@@ -389,15 +564,24 @@ def get_tickets(
     barcode: str | None = None,
     status: TicketStatus | None = None,
     type_: IssueType | None = None,
+    flavor: Flavor | None = None,
     reason: Annotated[list[ReasonType] | None, Query()] = None,
+    sort_by: str = "created_at",
+    sort_order: Literal["asc", "desc"] = "desc",
     page: int = 1,
     page_size: int = 10,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetTicketsResponse:
     """Get all tickets.
 
-    This function is used to get all tickets with status open.
+    A moderator lists every ticket. Any other logged-in user lists only the
+    tickets one of their own flags is attached to.
     """
+    if sort_by not in TICKET_SORTABLE_FIELDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sort_by field, must be one of {list(TICKET_SORTABLE_FIELDS)}",
+        )
     with db:
         offset = (page - 1) * page_size
         # Get IDs of flags with the specified filters
@@ -408,39 +592,53 @@ def get_tickets(
             where_clause.append(TicketModel.status == status)
         if type_:
             where_clause.append(TicketModel.type == type_)
+        if flavor:
+            where_clause.append(TicketModel.flavor == flavor)
+        # Both the tickets a plain user may see and the `reason` filter
+        # select tickets through their flags, so they go through the same
+        # subquery -- which also keeps a plain user from matching a ticket on
+        # the reason someone else gave.
+        flag_clause = [] if user.is_moderator else [FlagModel.user_id == user.user_id]
         if reason:
-            subquery = FlagModel.select(FlagModel.ticket_id).where(
-                FlagModel.reason.in_(reason)
-            )
+            flag_clause.append(FlagModel.reason.in_(reason))
+        if flag_clause:
+            subquery = FlagModel.select(FlagModel.ticket_id).where(*flag_clause)
             where_clause.append(TicketModel.id.in_(subquery))
 
+        # peewee's .where() raises on zero arguments (reduce() of an empty
+        # iterable), so only apply it when there is at least one filter --
+        # this is the plain, unfiltered "list everything" query otherwise.
+        query = TicketModel.select()
+        if where_clause:
+            query = query.where(*where_clause)
+
         # Get the total number of tickets with the specified filters
-        count = TicketModel.select().where(*where_clause).count()
+        count = query.count()
         max_page = count // page_size + int(count % page_size != 0)
         if page > max_page:
-            return GetTicketsResponse(tickets=[], max_page=max_page)
+            return GetTicketsResponse(tickets=[], max_page=max_page, total=count)
+
+        sort_field = TICKET_SORTABLE_FIELDS[sort_by]
+        order_expr = sort_field.asc() if sort_order == "asc" else sort_field.desc()
         return GetTicketsResponse(
             tickets=list(
-                TicketModel.select()
-                .where(*where_clause)
-                .order_by(TicketModel.created_at.desc())
-                .offset(offset)
-                .limit(page_size)
-                .dicts()
+                query.order_by(order_expr).offset(offset).limit(page_size).dicts()
             ),
             max_page=max_page,
+            total=count,
         )
 
 
 @api_v1_router.get("/tickets/{ticket_id}")
 def get_ticket(
-    ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
-):
+    ticket_id: int, user: AuthenticatedUser = Depends(authenticated_user)
+) -> Ticket:
     """Get a ticket by ID.
 
-    This function is used to get a ticket by its ID.
+    Readable by the moderators, and by the users who flagged it.
     """
     with db:
+        _authorize_ticket_access(ticket_id, user)
         try:
             return model_to_dict(TicketModel.get_by_id(ticket_id))
         except DoesNotExist:
@@ -450,18 +648,21 @@ def get_ticket(
 @api_v1_router.post("/flags/batch")
 def get_flags_by_ticket_batch(
     flag_request: FlagsByTicketIdRequest,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ):
     """Get all flags for tickets by IDs.
 
-    This function is used to get all flags for tickets by there IDs.
+    A moderator gets every flag on those tickets. Any other logged-in user
+    gets only their own, so a ticket they flagged comes back holding their
+    flag alone. A ticket they did not flag is simply absent from the answer.
     """
     with db:
-        flags = list(
-            FlagModel.select()
-            .where(FlagModel.ticket_id.in_(flag_request.ticket_ids))
-            .dicts()
+        query = FlagModel.select().where(
+            FlagModel.ticket_id.in_(flag_request.ticket_ids)
         )
+        if not user.is_moderator:
+            query = query.where(FlagModel.user_id == user.user_id)
+        flags = list(query.dicts())
 
     ticket_id_to_flags = defaultdict(list)
     for flag in flags:
@@ -470,24 +671,134 @@ def get_flags_by_ticket_batch(
     return {"ticket_id_to_flags": dict(ticket_id_to_flags)}
 
 
+def _capture_image_upload_metadata_if_needed(ticket: TicketModel) -> None:
+    """Fill in the image upload metadata of a ticket that has none yet.
+
+    Capturing it is best effort, so a ticket created while Open Food Facts was
+    unreachable has nothing: try again on every closing action, as long as the
+    image has not been deleted in the meantime.
+    """
+    image_id = _flagged_image_id(ticket)
+    if ticket.image_uploader is not None:
+        # The data is already present
+        return
+    if image_id is None:
+        # It's not about an  image
+        return
+    ticket.image_uploader, ticket.image_uploaded_at = fetch_image_upload_metadata(
+        ticket.barcode, image_id, ticket.flavor
+    )
+
+
+def _update_ticket_status(
+    ticket_id: int, new_status: TicketStatus, user_id: str
+) -> TicketModel:
+    """Update a ticket's status and record who did it, if it changed."""
+    try:
+        ticket = TicketModel.get_by_id(ticket_id)
+    except DoesNotExist:
+        raise HTTPException(status_code=404, detail="Not found")
+    if ticket.status != new_status:
+        ticket.status = new_status
+
+        _capture_image_upload_metadata_if_needed(ticket)
+
+        ticket.save()
+        ModeratorActionModel.create(
+            ticket=ticket,
+            user_id=user_id,
+            action_type=new_status,
+            created_at=datetime.utcnow(),
+        )
+    return ticket
+
+
 @api_v1_router.put("/tickets/{ticket_id}/status")
 def update_ticket_status(
     ticket_id: int,
     status: TicketStatus,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
 ) -> Ticket:
     """Update the status of a ticket by ID.
 
     This function is used to update the status of a ticket by its ID.
     """
     with db:
-        try:
-            ticket = TicketModel.get_by_id(ticket_id)
-            ticket.status = status
-            ticket.save()
-            return ticket
-        except DoesNotExist:
-            raise HTTPException(status_code=404, detail="Not found")
+        return _update_ticket_status(ticket_id, status, user_id)
+
+
+class ModeratorAction(BaseModel):
+    id: int = Field(..., description="ID of the moderator action")
+    action_type: TicketStatus = Field(
+        ..., description="The new ticket status this action set"
+    )
+    user_id: str = Field(..., description="Open Food Facts User ID of the moderator")
+    ticket_id: int = Field(..., description="ID of the ticket this action was taken on")
+    created_at: datetime = Field(..., description="When the action was taken")
+
+
+class GetModeratorActionsResponse(BaseModel):
+    """Response model for ticket- and user-scoped moderator action listings."""
+
+    actions: list[ModeratorAction]
+    total: int
+
+
+def _list_moderator_actions(
+    where_clause: list, page: int, page_size: int
+) -> GetModeratorActionsResponse:
+    offset = (page - 1) * page_size
+    total = ModeratorActionModel.select().where(*where_clause).count()
+    # Built from model instances rather than .dicts(): peewee's .dicts()
+    # emits the FK column under the Python attribute name ("ticket"),
+    # not the "ticket_id" the response model expects.
+    actions = [
+        ModeratorAction(
+            id=action.id,
+            action_type=action.action_type,
+            user_id=action.user_id,
+            ticket_id=action.ticket_id,
+            created_at=action.created_at,
+        )
+        for action in ModeratorActionModel.select()
+        .where(*where_clause)
+        .order_by(ModeratorActionModel.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    ]
+    return GetModeratorActionsResponse(actions=actions, total=total)
+
+
+@api_v1_router.get("/tickets/{ticket_id}/actions")
+def get_ticket_actions(
+    ticket_id: int,
+    page: int = 1,
+    page_size: int = 10,
+    user: AuthenticatedUser = Depends(authenticated_user),
+) -> GetModeratorActionsResponse:
+    """Get the moderation history of a ticket, most recent first.
+
+    Readable by the moderators, and by the users who flagged the ticket: what
+    was done about a report is answered to whoever made it.
+    """
+    with db:
+        _authorize_ticket_access(ticket_id, user)
+        return _list_moderator_actions(
+            [ModeratorActionModel.ticket == ticket_id], page, page_size
+        )
+
+
+@api_v1_router.get("/moderator_actions/me")
+def get_my_actions(
+    page: int = 1,
+    page_size: int = 10,
+    user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> GetModeratorActionsResponse:
+    """Get the moderation history of the current user, most recent first."""
+    with db:
+        return _list_moderator_actions(
+            [ModeratorActionModel.user_id == user_id], page, page_size
+        )
 
 
 class StatsResponse(BaseModel):
@@ -607,5 +918,10 @@ if auth_server_static and auth_server_static != "":
         response.set_cookie(key="session", value=body.session)
         return response
 
+
+# Acting on Open Food Facts lives in its own module; its routes are part of
+# the same /api/v1 surface, and its failures are reported like any other.
+api_v1_router.include_router(moderation_router)
+app.add_exception_handler(OFFAPIError, off_api_error_handler)
 
 app.include_router(api_v1_router)

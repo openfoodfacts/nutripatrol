@@ -2,11 +2,26 @@ import asyncio
 import hashlib
 import os
 from enum import StrEnum, auto
+from typing import NamedTuple
 from urllib.parse import urlparse, urlunparse
 
 import httpx
 from fastapi import HTTPException, Request
 from fastapi_cache.decorator import cache
+from openfoodfacts.utils import get_logger
+
+from app.config import settings
+
+logger = get_logger(__name__)
+
+# Local development only, and only when AUTH_DEV_USERS is set: the headers a
+# request uses to say who it acts as. The Open Food Facts session cookie is
+# set on an openfoodfacts host, so a front end served from localhost has no
+# way to obtain one - and without one every request here is anonymous, which
+# leaves the parts of the API that tell users apart (a moderator sees every
+# flag and ticket, anyone else only their own) impossible to exercise.
+DEV_USER_ID_HEADER = "X-Dev-User-Id"
+DEV_MODERATOR_HEADER = "X-Dev-Moderator"
 
 
 class UserStatus(StrEnum):
@@ -60,14 +75,69 @@ def get_auth_server(request: Request):
 # auth_url would be something like 'https://world.openfoodfacts.net/'
 
 
+class AuthenticatedUser(NamedTuple):
+    """The user a request acts as, and whether they moderate."""
+
+    user_id: str
+    is_moderator: bool
+
+
 def get_auth_dependency(user_status: UserStatus):
-    async def wrapper(request: Request):
+    async def wrapper(request: Request) -> str:
         return await auth_dependency(request, user_status)
 
     return wrapper
 
 
-async def auth_dependency(request: Request, user_status: UserStatus):
+async def authenticated_user(request: Request) -> AuthenticatedUser:
+    """Authenticate any logged-in user, and report whether they moderate.
+
+    Used by the endpoints that serve both kinds of user rather than turning
+    one of them away: a moderator sees every flag and ticket, while a plain
+    user only sees the flags they raised themselves, and the tickets those
+    flags are attached to.
+    """
+    return await _authenticate(request, UserStatus.isLoggedIn)
+
+
+async def auth_dependency(request: Request, user_status: UserStatus) -> str:
+    """Authenticate the request and return the acting user's id."""
+    return (await _authenticate(request, user_status)).user_id
+
+
+def _dev_user(request: Request) -> AuthenticatedUser | None:
+    """The user a dev-mode request claims to be, or None.
+
+    None both when the escape hatch is off and when the request does not use
+    it, so that the usual authentication runs unchanged - a dev stack still
+    serves Robotoff its bearer token, and a real session cookie still works.
+    """
+    if not settings.auth_dev_users:
+        return None
+    user_id = request.headers.get(DEV_USER_ID_HEADER)
+    if not user_id:
+        return None
+    return AuthenticatedUser(
+        user_id, is_moderator=request.headers.get(DEV_MODERATOR_HEADER) == "1"
+    )
+
+
+async def _authenticate(request: Request, user_status: UserStatus) -> AuthenticatedUser:
+    """Authenticate the request against `user_status`, or raise.
+
+    Returns who the request acts as, so that a caller which accepts several
+    kinds of user can tell them apart afterwards.
+    """
+    dev_user = _dev_user(request)
+    if dev_user is not None:
+        # Deliberately still subject to `user_status`: the point of naming a
+        # non-moderator is to be turned away exactly where a real one would
+        # be, so a dev stack answers "not a moderator" rather than serving
+        # every ticket to whoever asks.
+        if user_status == UserStatus.isModerator and not dev_user.is_moderator:
+            raise HTTPException(status_code=403, detail="User is not a moderator")
+        return dev_user
+
     # Check for bearer token in Authorization header
     # Currently, this is only for robotoff
     auth_header = request.headers.get("Authorization")
@@ -80,7 +150,11 @@ async def auth_dependency(request: Request, user_status: UserStatus):
         ).hexdigest()
         if hashed_token != hashed_env_token:
             raise HTTPException(status_code=403, detail="Invalid bearer token")
-        return  # If the token is valid, we just return
+        # The bearer token skips the `user_status` check entirely, so it has
+        # always satisfied `isModerator` as well: it is reported as a
+        # moderator so that the endpoints which filter on that keep serving
+        # Robotoff everything, as they did before they could tell.
+        return AuthenticatedUser("robotoff", is_moderator=True)
 
     # If no bearer token is provided, we check for session cookie
     # Check for session cookie
@@ -95,15 +169,49 @@ async def auth_dependency(request: Request, user_status: UserStatus):
             status_code=400, detail=f"Invalid user status : {user_status}"
         )
 
-    user_data = await _get_user_data_cached(session_cookie, auth_base_url)
+    auth_response = await _get_user_data_cached(session_cookie, auth_base_url)
+    user_data = auth_response.get("user", {})
+    is_moderator = user_data.get("moderator") == 1
 
     if user_status == UserStatus.isModerator:
-        if user_data.get("moderator") != 1:
+        if not is_moderator:
             raise HTTPException(status_code=403, detail="User is not a moderator")
 
     elif user_status == UserStatus.isLoggedIn:
         if user_data.get("moderator") is None:
             raise HTTPException(status_code=403, detail="User is not logged in")
+
+    user_id = auth_response.get("user_id", "")
+    if not user_id:
+        logger.warning("auth.pl returned no user_id for an authenticated session")
+    return AuthenticatedUser(user_id, is_moderator)
+
+
+class ModeratorSession(NamedTuple):
+    """A moderator, and the session we act on their behalf with."""
+
+    user_id: str
+    session_cookie: str
+
+
+async def moderator_session(request: Request) -> ModeratorSession:
+    """Authenticate a moderator and return their Open Food Facts session.
+
+    Used by the endpoints that write to Open Food Facts on the moderator's
+    behalf: they need the session cookie itself, not just the user id, so that
+    Open Food Facts applies its own permission checks and attributes the edit
+    to the moderator. This rules out the Robotoff bearer token, which
+    authenticates a machine with no Open Food Facts session behind it.
+    """
+    user_id = await auth_dependency(request, UserStatus.isModerator)
+    session_cookie = request.cookies.get("session")
+    if not session_cookie:
+        raise HTTPException(
+            status_code=401,
+            detail="This action is performed on Open Food Facts on your behalf, "
+            "and requires an Open Food Facts session cookie",
+        )
+    return ModeratorSession(user_id, session_cookie)
 
 
 @cache(key_builder=generate_cache_key, namespace="user-data", expire=60 * 60)
@@ -112,6 +220,11 @@ async def _get_user_data_cached(session_cookie: str, auth_base_url: str) -> dict
 
 
 async def _fetch_user_data(session_cookie: str, auth_base_url: str) -> dict:
+    """Fetch the full auth.pl response body.
+
+    Kept as the full body (not just the nested "user" object) because the
+    acting user's id is only available at the top level, as "user_id".
+    """
     async with httpx.AsyncClient() as client:
         response = await client.get(
             auth_base_url, cookies={"session": session_cookie}, params={"body": "1"}
@@ -121,4 +234,4 @@ async def _fetch_user_data(session_cookie: str, auth_base_url: str) -> dict:
         await asyncio.sleep(2)
         raise HTTPException(status_code=401, detail="Invalid session token")
 
-    return response.json().get("user", {})
+    return response.json()
