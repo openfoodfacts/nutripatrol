@@ -347,3 +347,174 @@ def test_the_creation_date_is_still_recorded(database, act_as):
     flag = flag_of(act_as, "alice")
 
     assert FlagModel.get_by_id(flag["id"]).created_at <= datetime.utcnow()
+
+
+# --- Users a session does not name -------------------------------------------
+#
+# A flag carries whatever user id its client sent, and auth.pl does not always
+# name the user behind a session, so both sides of the "is this your flag?"
+# comparison can be empty. An empty id is not an identity: it must never match,
+# or every user auth.pl leaves unnamed reads every unattributed flag, and every
+# ticket behind it, as if they had raised them.
+
+
+def unnamed_session(monkeypatch):
+    """Act as a logged-in user auth.pl answers about without a `user_id`."""
+
+    async def user_data(session_cookie, auth_base_url):
+        return {"user": {"moderator": 0}}
+
+    monkeypatch.setattr(auth_module, "_get_user_data_cached", user_data)
+
+
+def test_an_unnamed_user_lists_no_ticket(database, act_as, monkeypatch):
+    flag_of(act_as, "")
+    flag_of(act_as, "alice", barcode=OTHER_BARCODE)
+
+    unnamed_session(monkeypatch)
+    response = request("GET", "/api/v1/tickets")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["tickets"] == []
+    assert body["total"] == 0
+
+
+def test_an_unnamed_user_lists_no_flag(database, act_as, monkeypatch):
+    flag_of(act_as, "")
+
+    unnamed_session(monkeypatch)
+    response = request("GET", "/api/v1/flags")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["flags"] == []
+
+
+def test_an_unnamed_user_cannot_read_an_unattributed_flag(
+    database, act_as, monkeypatch
+):
+    flag = flag_of(act_as, "")
+
+    unnamed_session(monkeypatch)
+    response = request("GET", f"/api/v1/flags/{flag['id']}")
+
+    assert response.status_code == 404, response.text
+
+
+def test_an_unnamed_user_cannot_read_an_unattributed_ticket(
+    database, act_as, monkeypatch
+):
+    flag = flag_of(act_as, "")
+
+    unnamed_session(monkeypatch)
+    response = request("GET", f"/api/v1/tickets/{flag['ticket_id']}")
+
+    assert response.status_code == 404, response.text
+
+
+def test_an_unnamed_user_cannot_read_the_actions_of_an_unattributed_ticket(
+    database, act_as, monkeypatch
+):
+    flag = flag_of(act_as, "")
+    close(flag["ticket_id"], act_as)
+
+    unnamed_session(monkeypatch)
+    response = request("GET", f"/api/v1/tickets/{flag['ticket_id']}/actions")
+
+    assert response.status_code == 404, response.text
+
+
+def test_the_batch_endpoint_hands_an_unnamed_user_nothing(
+    database, act_as, monkeypatch
+):
+    flag = flag_of(act_as, "")
+
+    unnamed_session(monkeypatch)
+    response = request(
+        "POST", "/api/v1/flags/batch", json={"ticket_ids": [flag["ticket_id"]]}
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["ticket_id_to_flags"] == {}
+
+
+def test_an_unnamed_user_cannot_match_an_unattributed_ticket_on_its_reason(
+    database, act_as, monkeypatch
+):
+    """The `reason` filter is no way around it either."""
+    flag_of(act_as, "", reason="inappropriate")
+
+    unnamed_session(monkeypatch)
+    response = request("GET", "/api/v1/tickets?reason=inappropriate")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["tickets"] == []
+
+
+def test_a_session_that_names_the_empty_user_reads_nothing_either(database, act_as):
+    """auth.pl naming the user "" is the same non-identity as naming none."""
+    flag = flag_of(act_as, "")
+
+    act_as("")
+    assert request("GET", "/api/v1/flags").json()["flags"] == []
+    assert request("GET", "/api/v1/tickets").json()["tickets"] == []
+    assert request("GET", f"/api/v1/flags/{flag['id']}").status_code == 404
+    assert request("GET", f"/api/v1/tickets/{flag['ticket_id']}").status_code == 404
+
+
+def test_a_named_user_does_not_read_an_unattributed_flag(database, act_as):
+    unattributed = flag_of(act_as, "", barcode=OTHER_BARCODE)
+
+    act_as("alice")
+    response = request("GET", f"/api/v1/flags/{unattributed['id']}")
+
+    assert response.status_code == 404, response.text
+
+
+def test_a_moderator_still_reads_an_unattributed_flag(database, act_as):
+    """Unattributed flags belong to nobody, which leaves them to moderation."""
+    flag = flag_of(act_as, "")
+
+    act_as("mod", moderator=1)
+    assert request("GET", f"/api/v1/flags/{flag['id']}").status_code == 200
+    assert [f["id"] for f in request("GET", "/api/v1/flags").json()["flags"]] == [
+        flag["id"]
+    ]
+    assert request("GET", f"/api/v1/tickets/{flag['ticket_id']}").status_code == 200
+    assert [t["id"] for t in request("GET", "/api/v1/tickets").json()["tickets"]] == [
+        flag["ticket_id"]
+    ]
+
+
+def test_an_unnamed_user_can_still_raise_a_flag(database, act_as, monkeypatch):
+    """Reading nothing is not being turned away: flagging still works."""
+    unnamed_session(monkeypatch)
+
+    response = request(
+        "POST",
+        "/api/v1/flags",
+        json={
+            "barcode": BARCODE,
+            "type": "product",
+            "flavor": "off",
+            "user_id": "alice",
+            "source": "web",
+            "reason": "other",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+
+def test_a_named_user_still_reads_their_own_flag_through_the_empty_id_guard(
+    database, act_as
+):
+    """The guard against the empty id must not cost a real user their flags."""
+    flag_of(act_as, "")
+    alice_flag = flag_of(act_as, "alice")
+
+    act_as("alice")
+    response = request("GET", "/api/v1/flags")
+
+    assert response.status_code == 200, response.text
+    assert [f["id"] for f in response.json()["flags"]] == [alice_flag["id"]]
