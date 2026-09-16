@@ -457,6 +457,28 @@ def create_flag(
         )
 
 
+def _own_flag_clause(user: AuthenticatedUser) -> list:
+    """The `where` terms that keep a query to the flags `user` raised.
+
+    Such flags are left to the moderators, who read every flag.
+    """
+    return [
+        FlagModel.user_id == user.user_id,
+        FlagModel.user_id != "",
+        FlagModel.user_id.is_null(False),
+    ]
+
+
+def _readable_flags(user: AuthenticatedUser):
+    """The flags `user` may read, as a query to narrow further.
+
+    Every flag for a moderator, and only one's own for anyone else.
+    """
+    if user.is_moderator:
+        return FlagModel.select()
+    return FlagModel.select().where(*_own_flag_clause(user))
+
+
 def _authorize_ticket_access(ticket_id: int, user: AuthenticatedUser) -> None:
     """Refuse a plain user a ticket that none of their own flags opened.
 
@@ -469,7 +491,7 @@ def _authorize_ticket_access(ticket_id: int, user: AuthenticatedUser) -> None:
         return
     own_flag = (
         FlagModel.select()
-        .where(FlagModel.ticket == ticket_id, FlagModel.user_id == user.user_id)
+        .where(FlagModel.ticket == ticket_id, *_own_flag_clause(user))
         .exists()
     )
     if not own_flag:
@@ -504,9 +526,7 @@ def get_flags(
     raised themselves, and only those.
     """
     with db:
-        query = FlagModel.select()
-        if not user.is_moderator:
-            query = query.where(FlagModel.user_id == user.user_id)
+        query = _readable_flags(user)
         return GetFlagsResponse(flags=[_flag_as_response(flag) for flag in query])
 
 
@@ -521,11 +541,8 @@ def get_flag(
     reported a given product is itself part of what the flag discloses.
     """
     with db:
-        try:
-            flag = FlagModel.get_by_id(flag_id)
-        except DoesNotExist:
-            raise HTTPException(status_code=404, detail="Not found")
-        if not user.is_moderator and flag.user_id != user.user_id:
+        flag = _readable_flags(user).where(FlagModel.id == flag_id).first()
+        if flag is None:
             raise HTTPException(status_code=404, detail="Not found")
         return flag
 
@@ -598,7 +615,7 @@ def get_tickets(
         # select tickets through their flags, so they go through the same
         # subquery -- which also keeps a plain user from matching a ticket on
         # the reason someone else gave.
-        flag_clause = [] if user.is_moderator else [FlagModel.user_id == user.user_id]
+        flag_clause = [] if user.is_moderator else _own_flag_clause(user)
         if reason:
             flag_clause.append(FlagModel.reason.in_(reason))
         if flag_clause:
@@ -657,11 +674,9 @@ def get_flags_by_ticket_batch(
     flag alone. A ticket they did not flag is simply absent from the answer.
     """
     with db:
-        query = FlagModel.select().where(
+        query = _readable_flags(user).where(
             FlagModel.ticket_id.in_(flag_request.ticket_ids)
         )
-        if not user.is_moderator:
-            query = query.where(FlagModel.user_id == user.user_id)
         flags = list(query.dicts())
 
     ticket_id_to_flags = defaultdict(list)
