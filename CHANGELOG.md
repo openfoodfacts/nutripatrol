@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.4.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.3.0...v1.4.0) (2026-09-16)
+
+
+### Features
+
+* Add API to delete images in a single call ([#193](https://github.com/openfoodfacts/nutripatrol/issues/193)) ([cc6b013](https://github.com/openfoodfacts/nutripatrol/commit/cc6b013d8fa94eda772794661e8dd6e92cbce8d9))
+* Add GitHub Action to notify SDK repositories of API changes on release ([#134](https://github.com/openfoodfacts/nutripatrol/issues/134)) ([5d1f1ce](https://github.com/openfoodfacts/nutripatrol/commit/5d1f1cec16219dc4f964b1460ee7fca855ce3160))
+
+
+### Bug Fixes
+
+* **api:** never match an empty user id when filtering flags ([#194](https://github.com/openfoodfacts/nutripatrol/issues/194)) ([fb001f1](https://github.com/openfoodfacts/nutripatrol/commit/fb001f118d603ccef382a4882a2a9ddb4a7186ff))
+* permissions for merge conflict autolabel ([10029cb](https://github.com/openfoodfacts/nutripatrol/commit/10029cb309f4cf1fc0e6f85cb9abba344433d00b))
+* permissions for merge conflict autolabel ([#176](https://github.com/openfoodfacts/nutripatrol/issues/176)) ([10029cb](https://github.com/openfoodfacts/nutripatrol/commit/10029cb309f4cf1fc0e6f85cb9abba344433d00b))
+* permissions for semantic PRs action ([5bc2ca7](https://github.com/openfoodfacts/nutripatrol/commit/5bc2ca718208129b692e55f2551fc6033b41eb88))
+* permissions for semantic PRs action ([#177](https://github.com/openfoodfacts/nutripatrol/issues/177)) ([5bc2ca7](https://github.com/openfoodfacts/nutripatrol/commit/5bc2ca718208129b692e55f2551fc6033b41eb88))
+* permissions for top issues ([1e18e43](https://github.com/openfoodfacts/nutripatrol/commit/1e18e436579d3f9ed0078c075043f004e64313ba))
+* permissions for top issues ([#173](https://github.com/openfoodfacts/nutripatrol/issues/173)) ([1e18e43](https://github.com/openfoodfacts/nutripatrol/commit/1e18e436579d3f9ed0078c075043f004e64313ba))
+* typo in changelog ([#158](https://github.com/openfoodfacts/nutripatrol/issues/158)) ([adbe0dd](https://github.com/openfoodfacts/nutripatrol/commit/adbe0ddc7b17df7d7dc0ddc67876bfe8399d83f2))
+
 ## [1.3.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.2.1...v1.3.0) (2026-04-01)
 
 
