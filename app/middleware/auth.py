@@ -10,7 +10,18 @@ from fastapi import HTTPException, Request
 from fastapi_cache.decorator import cache
 from openfoodfacts.utils import get_logger
 
+from app.config import settings
+
 logger = get_logger(__name__)
+
+# Local development only, and only when AUTH_DEV_USERS is set: the headers a
+# request uses to say who it acts as. The Open Food Facts session cookie is
+# set on an openfoodfacts host, so a front end served from localhost has no
+# way to obtain one - and without one every request here is anonymous, which
+# leaves the parts of the API that tell users apart (a moderator sees every
+# flag and ticket, anyone else only their own) impossible to exercise.
+DEV_USER_ID_HEADER = "X-Dev-User-Id"
+DEV_MODERATOR_HEADER = "X-Dev-Moderator"
 
 
 class UserStatus(StrEnum):
@@ -94,12 +105,39 @@ async def auth_dependency(request: Request, user_status: UserStatus) -> str:
     return (await _authenticate(request, user_status)).user_id
 
 
+def _dev_user(request: Request) -> AuthenticatedUser | None:
+    """The user a dev-mode request claims to be, or None.
+
+    None both when the escape hatch is off and when the request does not use
+    it, so that the usual authentication runs unchanged - a dev stack still
+    serves Robotoff its bearer token, and a real session cookie still works.
+    """
+    if not settings.auth_dev_users:
+        return None
+    user_id = request.headers.get(DEV_USER_ID_HEADER)
+    if not user_id:
+        return None
+    return AuthenticatedUser(
+        user_id, is_moderator=request.headers.get(DEV_MODERATOR_HEADER) == "1"
+    )
+
+
 async def _authenticate(request: Request, user_status: UserStatus) -> AuthenticatedUser:
     """Authenticate the request against `user_status`, or raise.
 
     Returns who the request acts as, so that a caller which accepts several
     kinds of user can tell them apart afterwards.
     """
+    dev_user = _dev_user(request)
+    if dev_user is not None:
+        # Deliberately still subject to `user_status`: the point of naming a
+        # non-moderator is to be turned away exactly where a real one would
+        # be, so a dev stack answers "not a moderator" rather than serving
+        # every ticket to whoever asks.
+        if user_status == UserStatus.isModerator and not dev_user.is_moderator:
+            raise HTTPException(status_code=403, detail="User is not a moderator")
+        return dev_user
+
     # Check for bearer token in Authorization header
     # Currently, this is only for robotoff
     auth_header = request.headers.get("Authorization")

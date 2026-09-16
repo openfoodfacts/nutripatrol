@@ -66,6 +66,44 @@ make up
 Your local instance of NutriPatrol should now be running at http://localhost:3000.
 ### Authentication for local dev
 
+### Switching between users in local dev
+
+The Open Food Facts session cookie is set on an `openfoodfacts` host, so a
+front end served from `localhost` never gets one - which leaves every local
+request anonymous, and the parts of the API that tell users apart impossible
+to exercise: a moderator lists every ticket and flag, anyone else only the
+flags they raised and the tickets those are attached to.
+
+Set `AUTH_DEV_USERS=1` in `.env` and a request can name the user it acts as
+instead:
+
+| Header | Meaning |
+|---|---|
+| `X-Dev-User-Id: <user id>` | Act as that Open Food Facts user id |
+| `X-Dev-Moderator: 1` | ...and as a moderator |
+
+Sending neither header leaves the request anonymous, as before - which is how
+a logged-out visitor is tested. The headers are still subject to the usual
+permission checks: without `X-Dev-Moderator`, the moderator-only endpoints
+answer 403, exactly as they would for a real account.
+
+```console
+curl -H "X-Dev-User-Id: alice" http://localhost:8000/api/v1/tickets   # alice's own tickets
+curl -H "X-Dev-User-Id: bob" -H "X-Dev-Moderator: 1" \
+     http://localhost:8000/api/v1/tickets                             # every ticket
+```
+
+The NutriPatrol front end sends these for you: its login page, in dev mode,
+offers the same three choices (see `nutripatrol-frontend`).
+
+The one thing this cannot fake is `/products/{barcode}/...`, which edits Open
+Food Facts on the moderator's behalf and forwards their real session cookie -
+those endpoints answer 401 without one, and need the setup below.
+
+**`AUTH_DEV_USERS` is impersonation by header**: any caller can claim any user
+id, and moderator rights with it. It must stay unset outside a developer's own
+machine.
+
 ### To test with a global instance of Product Opener
 
 In .env file uncomment the AUTH_SERVER_STATIC variable.
