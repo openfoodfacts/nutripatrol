@@ -8,6 +8,8 @@ on:
     tags:
       - v*.*.*
 
+permissions:
+  contents: read
 
 # Note on secrets used for connection
 # They are configured as environment secrets
