@@ -1,16 +1,45 @@
 name: Add bugs and PRs to the relevant GitHub Projects
+permissions: {}
 
 on:
   issues:
     types:
       - opened
-      - labeled
       - edited
-  pull_request:
+      - deleted
+      - transferred
+      - pinned
+      - unpinned
+      - closed
+      - reopened
+      - assigned
+      - unassigned
+      - labeled
+      - unlabeled
+      - locked
+      - unlocked
+      - milestoned
+      - demilestoned
+
+  pull_request_target:
     types:
-      - opened
-      - labeled
-      - edited
+    - assigned
+    - unassigned
+    - labeled
+    - unlabeled
+    - opened
+    - edited
+    - closed
+    - reopened
+    - synchronize
+    - converted_to_draft
+    - ready_for_review
+    - locked
+    - unlocked
+    - review_requested
+    - review_request_removed
+    - auto_merge_enabled
+    - auto_merge_disabled
 jobs:
   add-to-project:
     name: Add issue to project

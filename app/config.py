@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     cors_allow_origins: list[str] = Field(default_factory=list)
     off_tld: Environment = Environment.net
     environment: str = "dev"
+    # Local development only: lets a request name the user it acts as, with
+    # the X-Dev-User-Id / X-Dev-Moderator headers, instead of carrying an Open
+    # Food Facts session cookie (see app.middleware.auth). Off unless set, and
+    # it must stay off anywhere reachable from outside a developer's machine:
+    # it is impersonation by header, with nothing to stop a caller claiming
+    # moderator rights.
+    auth_dev_users: bool = False
     migration_dir: Path = PROJECT_DIR / "migrations"
 
 

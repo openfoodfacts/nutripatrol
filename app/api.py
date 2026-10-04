@@ -23,6 +23,23 @@ from app.config import settings
 from app.middleware.auth import UserStatus, get_auth_dependency
 from app.models import FlagModel, ModeratorActionModel, TicketModel, db
 from app.moderation_api import off_api_error_handler
+from app.flag_extra_data import EXTRA_DATA_MODELS
+from app.flag_reasons import (
+    BOT_ONLY_REASONS,
+    REASONS_BY_TYPE,
+    VALID_REASONS,
+    IssueType,
+    ReasonType,
+)
+from app.middleware.auth import (
+    AuthenticatedUser,
+    UserStatus,
+    authenticated_user,
+    get_auth_dependency,
+)
+from app.models import FlagModel, ModeratorActionModel, TicketModel, db
+from app.moderation_api import off_api_error_handler
+from app.moderation_api import router as moderation_router
 from app.off_api import (
     OFFAPIError,
     ProductSnapshot,
@@ -49,10 +66,9 @@ A flag containes the following main fields:
 - `confidence`: Confidence score of the model that generated the flag, this field should only be provided by Robotoff.
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
-- `reason`: Reason for flagging provided by the user. For images, it can be `inappropriate`, `human`, `beauty` or `other`
-
-`image_to_delete_spam` or `image_to_delete_face`. For products it can be `product_to_delete`. The field is optional.
+- `reason`: Why the content was reported, from the list `GET /reasons` serves. Which reasons make sense depends on the type of the flag -- `wrong_barcode` or `discontinued` for a product, `copyright` or `includes_personal_infos` for an image -- but the API accepts any of them for any type, because the clients differ on that point. `human` and `beauty` belong to Robotoff and are not offered to people. The field is optional.
 - `comment`: Comment provided by the user during flagging. This is a free text field.
+- `extra_data`: Structured details about the report, whose accepted keys depend on `reason`. `GET /reasons` describes the keys each reason takes.
 - `created_at`: Creation datetime of the flag, in UTC. It is stamped by the server when the flag is saved, and is not accepted in the request body.
 - `product_revision`: Revision of the Open Food Facts product when the flag was created. Open Food Facts only serves the current revision of a product, so it is captured when the flag is created, and tells a moderator which product version the flagger was looking at. It is null for a search flag, and if Open Food Facts could not be reached.
 
@@ -64,10 +80,33 @@ A ticket containes the following main fields:
 
 - `type`: Type of the issue. It can be `product`, `image` or `search`.
 - `url`: URL of the product or of the flagged image.
-- `status`: Status of the ticket. It can be `open` or `closed`.
+- `status`: Status of the ticket. It can be `open`, `closed-no-issue` (the flagged content was fine as it was), `closed-fixed` (the issue was corrected), or `closed` (closed without recording which of the two it was).
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
-- `image_uploader` and `image_uploaded_at`: Open Food Facts User ID of the user who uploaded the flagged image, and upload date. Open Food Facts loses them once the image is deleted, so they are captured when a moderator closes the ticket, and are null if the image had already been deleted by then.
+- `image_uploader` and `image_uploaded_at`: Open Food Facts User ID of the user who uploaded the flagged image, and upload date. Open Food Facts loses them once the image is deleted, so they are captured when the ticket is created, and captured again when a moderator closes it if they could not be read then. They are null if the image had already been deleted by then.
+
+## Moderation actions
+
+Closing a ticket only records what a moderator decided; acting on it means editing Open Food Facts. The `/products/{barcode}/...` endpoints do that server-side, so that a client does not have to know the Open Food Facts endpoints, which flavor a product lives on, or how each of them reports a failure:
+
+- `POST /products/{barcode}/images/delete`: move flagged images to the Open Food Facts trash.
+- `POST /products/{barcode}/images/move`: move images to another product, for an image uploaded on the wrong barcode.
+- `POST /products/{barcode}/delete`: delete a product page.
+- `POST /products/{barcode}/change_barcode`: give a product another barcode.
+- `PATCH /products/{barcode}`: edit product fields.
+- `POST /products/{barcode}/obsolete`: mark a product as no longer sold, or un-mark it.
+
+They are all performed **on behalf of the moderator**: their Open Food Facts session cookie is forwarded, so Open Food Facts applies its own permission checks and records the edit under their name. They therefore require a session cookie, and cannot be called with the Robotoff bearer token.
+
+## Who sees what
+
+Every endpoint requires an Open Food Facts session. Moderators see everything. Any other logged-in user follows their own reports, and only those:
+
+- `GET /flags` and `GET /flags/{flag_id}`: the flags they raised. Someone else's flag answers `404`, the same as a flag that does not exist.
+- `GET /tickets` and `GET /tickets/{ticket_id}`: the tickets one of their flags is attached to. A ticket gathers the flags of everyone who reported the same product or image, so reaching it through one's own flag does not hand over the others: `POST /flags/batch` returns, of a shared ticket, only the caller's own flag.
+- `GET /tickets/{ticket_id}/actions`: the moderation history of those tickets, so that a flagger can see what was done about their report.
+
+Closing a ticket, and everything under `/products/{barcode}/...`, stays with the moderators, as do `GET /stats` and `GET /moderator_actions/me`.
 
 """
 
@@ -127,27 +166,21 @@ def _get_device_id(request: Request):
 class TicketStatus(StrEnum):
     open = auto()
     closed = auto()
+    # The two outcomes a moderator can record when closing a ticket: the
+    # flagged content was fine as it was, or it was and has been corrected.
+    # `closed` predates them and is kept for the tickets already stored with
+    # it, and for clients that do not tell the two apart.
+    closed_no_issue = "closed-no-issue"
+    closed_fixed = "closed-fixed"
 
 
-class IssueType(StrEnum):
-    """Type of the flag/ticket."""
-
-    # Issue about any of the product fields (image excluded), or about the
-    # product as a whole
-    product = auto()
-    # Issue about a product image
-    image = auto()
-    # Issue about search results
-    search = auto()
-
-
-class ReasonType(StrEnum):
-    """Type of the reason for flagging."""
-
-    inappropriate = auto()
-    human = auto()
-    beauty = auto()
-    other = auto()
+CLOSED_TICKET_STATUSES = frozenset(
+    {
+        TicketStatus.closed,
+        TicketStatus.closed_no_issue,
+        TicketStatus.closed_fixed,
+    }
+)
 
 
 class TicketCreate(BaseModel):
@@ -193,13 +226,15 @@ class SourceType(StrEnum):
     robotoff = auto()
 
 
-class FlagCreate(BaseModel):
-    # What a flag records about itself -- when it was created, which product
-    # revision it was raised on -- is assigned by the server, and a client
-    # cannot pass it. Unknown fields are refused rather than dropped, so that
-    # trying to (or misspelling `comment`) is an error the caller sees,
-    # instead of data quietly going missing.
-    model_config = ConfigDict(extra="forbid")
+class FlagBase(BaseModel):
+    """The fields a client sends and the API returns alike.
+
+    They are split out of `FlagCreate` because a flag is read back under
+    rules it was not necessarily written under. Rows predate the taxonomy --
+    four of them still say `"string"` -- and the clients that write them are
+    not all ours to deploy. Tightening the input would otherwise make reading
+    those rows fail, turning a stricter form into a 500 on `GET /flags`.
+    """
 
     barcode: str | None = Field(
         None,
@@ -230,15 +265,88 @@ class FlagCreate(BaseModel):
     flavor: Flavor = Field(
         ..., description="Flavor (project) associated with the ticket"
     )
+    # Lenient on purpose, on the way in as well as on the way out: an
+    # unknown reason is logged and kept rather than refused, so that a client
+    # we cannot deploy with does not start failing the day the list changes.
+    # `ReasonType` is what the form offers and what the filters accept.
     reason: str | None = Field(
         None,
         min_length=1,
-        description="Reason for flagging provided by the user. The field is optional.",
+        description="Why the content was reported, from the list `GET /reasons` "
+        "serves. The field is optional.",
+        examples=["wrong_barcode"],
     )
     comment: str | None = Field(
         None,
         description="Comment provided by the user during flagging. This is a free text field.",
     )
+    extra_data: dict[str, Any] | None = Field(
+        None,
+        description="Structured details about the report. Which keys are "
+        "accepted depends on `reason`, and unknown ones are refused. Every key "
+        "is optional: a flag carrying only `reason` and `comment` stays valid. "
+        "`GET /reasons` describes the keys each reason takes.",
+        examples=[{"correct_barcode": "4335619032118"}],
+    )
+
+
+class FlagCreate(FlagBase):
+    # What a flag records about itself -- when it was created, which product
+    # revision it was raised on -- is assigned by the server, and a client
+    # cannot pass it. Unknown fields are refused rather than dropped, so that
+    # trying to (or misspelling `comment`) is an error the caller sees,
+    # instead of data quietly going missing.
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_extra_data(self) -> "FlagCreate":
+        """Check `extra_data` against the schema its `reason` allows.
+
+        The reason lives outside `extra_data`, and Pydantic cannot
+        discriminate a union on a field that is not in it -- so the schema is
+        looked up rather than tagged. That also keeps the error about the key
+        the caller got wrong, instead of about a union with fifteen branches.
+        """
+        if self.extra_data is None:
+            return self
+        if self.reason is None:
+            raise ValueError("`extra_data` needs a `reason` to be read against")
+        try:
+            reason = ReasonType(self.reason)
+        except ValueError:
+            raise ValueError(
+                f"`extra_data` is not accepted for the unknown reason `{self.reason}`"
+            ) from None
+        # Most reasons have no entry: they take nothing beyond `comment`.
+        model = EXTRA_DATA_MODELS.get(reason)
+        if model is None:
+            raise ValueError(f"`extra_data` is not accepted for reason `{self.reason}`")
+        parsed = model.model_validate(self.extra_data)
+        # Stored the way it will be read: `mode="json"` keeps
+        # `**flag.model_dump()` below handing the JSON column values it can
+        # serialize, whatever a field is typed as. `exclude_none` keeps the
+        # unanswered questions out of the row entirely, so that "not asked"
+        # and "answered nothing" do not have to be told apart.
+        self.extra_data = parsed.model_dump(mode="json", exclude_none=True) or None
+        return self
+
+    @model_validator(mode="after")
+    def warn_about_an_unknown_reason(self) -> "FlagCreate":
+        """Record, without refusing, a reason outside the taxonomy.
+
+        The mobile app has been filing flags with the reason `"string"`, and
+        it is not deployed from this repository. Refusing those outright
+        would break reporting for everyone using it, so they are counted
+        first and refused once the logs are quiet.
+        """
+        if self.reason is not None and self.reason not in VALID_REASONS:
+            logger.warning(
+                "Flag from %s (%s) carries the unknown reason %r",
+                self.source,
+                self.user_id,
+                self.reason,
+            )
+        return self
 
     @model_validator(mode="after")
     def image_id_is_provided_when_type_is_image(self) -> "FlagCreate":
@@ -293,7 +401,7 @@ class FlagCreate(BaseModel):
         return data
 
 
-class Flag(FlagCreate):
+class Flag(FlagBase):
     id: int = Field(..., description="ID of the flag")
     ticket_id: int = Field(..., description="ID of the ticket associated with the flag")
     device_id: str = Field(..., description="Device ID of the flagger")
@@ -339,6 +447,69 @@ def _capture_product_snapshot(flag: FlagCreate, with_image: bool) -> ProductSnap
         return ProductSnapshot()
     image_id = _flagged_image_id(flag) if with_image else None
     return fetch_product_snapshot(flag.barcode, flag.flavor, image_id)
+
+
+class ReasonDescription(BaseModel):
+    """One reason, and what a report filed under it can carry."""
+
+    value: ReasonType = Field(..., description="Value to send as a flag's `reason`")
+    types: list[IssueType] = Field(
+        ...,
+        description="Types of issue the flag form offers this reason for. It "
+        "is not enforced: the API accepts any reason for any type, because "
+        "the clients disagree on the point.",
+    )
+    bot_only: bool = Field(
+        ...,
+        description="Whether the reason belongs to an automated source and is "
+        "not offered to people.",
+    )
+    extra_data_schema: dict[str, Any] | None = Field(
+        ...,
+        description="JSON Schema of the `extra_data` this reason accepts, or "
+        "null when it accepts none.",
+    )
+
+
+class GetReasonsResponse(BaseModel):
+    reasons: list[ReasonDescription]
+
+
+@api_v1_router.get("/reasons")
+def get_reasons() -> GetReasonsResponse:
+    """List the reasons a flag can be filed under.
+
+    Served so that a client does not have to keep its own copy of the
+    taxonomy in step with this one -- which is what went wrong before: the
+    form, the filters and this API each had a list, and filtering by a reason
+    the form actually submitted answered 422.
+
+    Open to anyone logged in: it describes the form, and holds no report.
+    """
+    types_by_reason: dict[ReasonType, list[IssueType]] = {
+        reason: [] for reason in ReasonType
+    }
+    for issue_type, reasons in REASONS_BY_TYPE.items():
+        for reason in reasons:
+            types_by_reason[reason].append(issue_type)
+
+    reasons = []
+    for reason in ReasonType:
+        # Not every reason takes extra data, and the ones that do not are
+        # still part of the list the form is built from.
+        model = EXTRA_DATA_MODELS.get(reason)
+        reasons.append(
+            ReasonDescription(
+                value=reason,
+                types=types_by_reason[reason],
+                bot_only=reason in BOT_ONLY_REASONS,
+                extra_data_schema=(
+                    model.model_json_schema() if model is not None else None
+                ),
+            )
+        )
+
+    return GetReasonsResponse(reasons=reasons)
 
 
 @api_v1_router.post("/flags")
@@ -398,7 +569,7 @@ def create_flag(
                 ),
                 snapshot,
             )
-        elif ticket.status == TicketStatus.closed:
+        elif ticket.status in CLOSED_TICKET_STATUSES:
             # Reopen the ticket if it was closed
             ticket.status = TicketStatus.open
             ticket.save()
@@ -413,35 +584,94 @@ def create_flag(
         )
 
 
+def _own_flag_clause(user: AuthenticatedUser) -> list:
+    """The `where` terms that keep a query to the flags `user` raised.
+
+    Such flags are left to the moderators, who read every flag.
+    """
+    return [
+        FlagModel.user_id == user.user_id,
+        FlagModel.user_id != "",
+        FlagModel.user_id.is_null(False),
+    ]
+
+
+def _readable_flags(user: AuthenticatedUser):
+    """The flags `user` may read, as a query to narrow further.
+
+    Every flag for a moderator, and only one's own for anyone else.
+    """
+    if user.is_moderator:
+        return FlagModel.select()
+    return FlagModel.select().where(*_own_flag_clause(user))
+
+
+def _authorize_ticket_access(ticket_id: int, user: AuthenticatedUser) -> None:
+    """Refuse a plain user a ticket that none of their own flags opened.
+
+    A ticket gathers the flags of everyone who reported the same product or
+    image, so reaching it through one's own flag must not hand over the
+    others: it is only the ticket itself, and its moderation history, that a
+    flagger gets to follow.
+    """
+    if user.is_moderator:
+        return
+    own_flag = (
+        FlagModel.select()
+        .where(FlagModel.ticket == ticket_id, *_own_flag_clause(user))
+        .exists()
+    )
+    if not own_flag:
+        # 404 rather than 403, as with a flag: which products other users
+        # have reported is not something a flagger gets to probe for.
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def _flag_as_response(flag: FlagModel) -> dict:
+    """Render a flag the way the API describes it.
+
+    peewee names a foreign key after the Python attribute -- "ticket" -- while
+    a flag is published with the "ticket_id" of its ticket, so the raw rows
+    cannot be handed to the response model as they come.
+    """
+    data = model_to_dict(flag, recurse=False)
+    data["ticket_id"] = data.pop("ticket")
+    return data
+
+
 class GetFlagsResponse(BaseModel):
     flags: list[Flag]
 
 
 @api_v1_router.get("/flags")
 def get_flags(
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetFlagsResponse:
     """Get all flags.
 
-    This function is used to get all flags.
+    A moderator gets every flag. Any other logged-in user gets the flags they
+    raised themselves, and only those.
     """
     with db:
-        return GetFlagsResponse(flags=list(FlagModel.select().dicts()))
+        query = _readable_flags(user)
+        return GetFlagsResponse(flags=[_flag_as_response(flag) for flag in query])
 
 
 @api_v1_router.get("/flags/{flag_id}")
 def get_flag(
-    flag_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+    flag_id: int, user: AuthenticatedUser = Depends(authenticated_user)
 ) -> Flag:
     """Get a flag by ID.
 
-    This function is used to get a flag by its ID.
+    A flag is readable by its author and by the moderators. For anyone else
+    it answers 404, the same as a flag that does not exist: that someone
+    reported a given product is itself part of what the flag discloses.
     """
     with db:
-        try:
-            return FlagModel.get_by_id(flag_id)
-        except DoesNotExist:
+        flag = _readable_flags(user).where(FlagModel.id == flag_id).first()
+        if flag is None:
             raise HTTPException(status_code=404, detail="Not found")
+        return flag
 
 
 def _create_ticket(ticket: TicketCreate, snapshot: ProductSnapshot):
@@ -484,11 +714,12 @@ def get_tickets(
     sort_order: Literal["asc", "desc"] = "desc",
     page: int = 1,
     page_size: int = 10,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetTicketsResponse:
     """Get all tickets.
 
-    This function is used to get all tickets with status open.
+    A moderator lists every ticket. Any other logged-in user lists only the
+    tickets one of their own flags is attached to.
     """
     if sort_by not in TICKET_SORTABLE_FIELDS:
         raise HTTPException(
@@ -507,10 +738,15 @@ def get_tickets(
             where_clause.append(TicketModel.type == type_)
         if flavor:
             where_clause.append(TicketModel.flavor == flavor)
+        # Both the tickets a plain user may see and the `reason` filter
+        # select tickets through their flags, so they go through the same
+        # subquery -- which also keeps a plain user from matching a ticket on
+        # the reason someone else gave.
+        flag_clause = [] if user.is_moderator else _own_flag_clause(user)
         if reason:
-            subquery = FlagModel.select(FlagModel.ticket_id).where(
-                FlagModel.reason.in_(reason)
-            )
+            flag_clause.append(FlagModel.reason.in_(reason))
+        if flag_clause:
+            subquery = FlagModel.select(FlagModel.ticket_id).where(*flag_clause)
             where_clause.append(TicketModel.id.in_(subquery))
 
         # peewee's .where() raises on zero arguments (reduce() of an empty
@@ -539,13 +775,14 @@ def get_tickets(
 
 @api_v1_router.get("/tickets/{ticket_id}")
 def get_ticket(
-    ticket_id: int, _: Any = Depends(get_auth_dependency(UserStatus.isModerator))
+    ticket_id: int, user: AuthenticatedUser = Depends(authenticated_user)
 ) -> Ticket:
     """Get a ticket by ID.
 
-    This function is used to get a ticket by its ID.
+    Readable by the moderators, and by the users who flagged it.
     """
     with db:
+        _authorize_ticket_access(ticket_id, user)
         try:
             return model_to_dict(TicketModel.get_by_id(ticket_id))
         except DoesNotExist:
@@ -555,18 +792,19 @@ def get_ticket(
 @api_v1_router.post("/flags/batch")
 def get_flags_by_ticket_batch(
     flag_request: FlagsByTicketIdRequest,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ):
     """Get all flags for tickets by IDs.
 
-    This function is used to get all flags for tickets by there IDs.
+    A moderator gets every flag on those tickets. Any other logged-in user
+    gets only their own, so a ticket they flagged comes back holding their
+    flag alone. A ticket they did not flag is simply absent from the answer.
     """
     with db:
-        flags = list(
-            FlagModel.select()
-            .where(FlagModel.ticket_id.in_(flag_request.ticket_ids))
-            .dicts()
+        query = _readable_flags(user).where(
+            FlagModel.ticket_id.in_(flag_request.ticket_ids)
         )
+        flags = list(query.dicts())
 
     ticket_id_to_flags = defaultdict(list)
     for flag in flags:
@@ -678,10 +916,15 @@ def get_ticket_actions(
     ticket_id: int,
     page: int = 1,
     page_size: int = 10,
-    _: Any = Depends(get_auth_dependency(UserStatus.isModerator)),
+    user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetModeratorActionsResponse:
-    """Get the moderation history of a ticket, most recent first."""
+    """Get the moderation history of a ticket, most recent first.
+
+    Readable by the moderators, and by the users who flagged the ticket: what
+    was done about a report is answered to whoever made it.
+    """
     with db:
+        _authorize_ticket_access(ticket_id, user)
         return _list_moderator_actions(
             [ModeratorActionModel.ticket == ticket_id], page, page_size
         )
@@ -817,6 +1060,11 @@ if auth_server_static and auth_server_static != "":
         response.set_cookie(key="session", value=body.session)
         return response
 
+app.add_exception_handler(OFFAPIError, off_api_error_handler)
+
+# Acting on Open Food Facts lives in its own module; its routes are part of
+# the same /api/v1 surface, and its failures are reported like any other.
+api_v1_router.include_router(moderation_router)
 app.add_exception_handler(OFFAPIError, off_api_error_handler)
 
 app.include_router(api_v1_router)

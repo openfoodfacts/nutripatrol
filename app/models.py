@@ -1,3 +1,5 @@
+import json
+
 from peewee import (
     CharField,
     DateTimeField,
@@ -19,6 +21,31 @@ db = PostgresqlDatabase(
     host=settings.postgres_host,
     port=settings.postgres_port,
 )
+
+
+class JSONBField(TextField):
+    """A JSONB column that also survives the SQLite the tests run on.
+
+    `playhouse.postgres_ext.BinaryJSONField` would be the obvious choice, but
+    it needs a `PostgresqlExtDatabase` and emits a cast to `jsonb` that SQLite
+    quietly evaluates to `0`, which would make every test store nothing.
+    Declaring the column type by hand keeps the production schema identical
+    and leaves the value readable on both.
+
+    Postgres coerces the text parameter into the column's type on assignment
+    and hands the value back already decoded; SQLite hands back the text that
+    was stored. Hence the isinstance check rather than a blind `json.loads`.
+    """
+
+    field_type = "JSONB"
+
+    def db_value(self, value):
+        return None if value is None else json.dumps(value)
+
+    def python_value(self, value):
+        if value is None or not isinstance(value, (str, bytes)):
+            return value
+        return json.loads(value)
 
 
 class TicketModel(Model):
@@ -65,6 +92,11 @@ class FlagModel(Model):
     flavor = CharField(max_length=20)
     reason = TextField(null=True)
     comment = TextField(null=True)
+    # Structured details about the report, whose shape depends on `reason`:
+    # the correct barcode behind a `wrong_barcode`, the offending uploader
+    # behind a `copyright`. Validated at the API boundary
+    # (app/flag_extra_data.py), never here.
+    extra_data = JSONBField(null=True)
     # Revision of the Open Food Facts product at the time the flag was raised,
     # captured on creation so that a moderator knows which product version the
     # flagger was looking at. Null when the flag is not about a product, or
