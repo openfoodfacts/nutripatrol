@@ -20,6 +20,14 @@ from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.config import settings
+from app.flag_extra_data import EXTRA_DATA_MODELS
+from app.flag_reasons import (
+    BOT_ONLY_REASONS,
+    REASONS_BY_TYPE,
+    VALID_REASONS,
+    IssueType,
+    ReasonType,
+)
 from app.middleware.auth import (
     AuthenticatedUser,
     UserStatus,
@@ -55,10 +63,9 @@ A flag containes the following main fields:
 - `confidence`: Confidence score of the model that generated the flag, this field should only be provided by Robotoff.
 - `image_id`: ID of the flagged image, if the ticket type is `image`.
 - `flavor`: Flavor (project) associated with the ticket.
-- `reason`: Reason for flagging provided by the user. For images, it can be `inappropriate`, `human`, `beauty` or `other`
-
-`image_to_delete_spam` or `image_to_delete_face`. For products it can be `product_to_delete`. The field is optional.
+- `reason`: Why the content was reported, from the list `GET /reasons` serves. Which reasons make sense depends on the type of the flag -- `wrong_barcode` or `discontinued` for a product, `copyright` or `includes_personal_infos` for an image -- but the API accepts any of them for any type, because the clients differ on that point. `human` and `beauty` belong to Robotoff and are not offered to people. The field is optional.
 - `comment`: Comment provided by the user during flagging. This is a free text field.
+- `extra_data`: Structured details about the report, whose accepted keys depend on `reason`. `GET /reasons` describes the keys each reason takes.
 - `created_at`: Creation datetime of the flag, in UTC. It is stamped by the server when the flag is saved, and is not accepted in the request body.
 - `product_revision`: Revision of the Open Food Facts product when the flag was created. Open Food Facts only serves the current revision of a product, so it is captured when the flag is created, and tells a moderator which product version the flagger was looking at. It is null for a search flag, and if Open Food Facts could not be reached.
 
@@ -173,27 +180,6 @@ CLOSED_TICKET_STATUSES = frozenset(
 )
 
 
-class IssueType(StrEnum):
-    """Type of the flag/ticket."""
-
-    # Issue about any of the product fields (image excluded), or about the
-    # product as a whole
-    product = auto()
-    # Issue about a product image
-    image = auto()
-    # Issue about search results
-    search = auto()
-
-
-class ReasonType(StrEnum):
-    """Type of the reason for flagging."""
-
-    inappropriate = auto()
-    human = auto()
-    beauty = auto()
-    other = auto()
-
-
 class TicketCreate(BaseModel):
     barcode: str | None = Field(
         None,
@@ -237,13 +223,15 @@ class SourceType(StrEnum):
     robotoff = auto()
 
 
-class FlagCreate(BaseModel):
-    # What a flag records about itself -- when it was created, which product
-    # revision it was raised on -- is assigned by the server, and a client
-    # cannot pass it. Unknown fields are refused rather than dropped, so that
-    # trying to (or misspelling `comment`) is an error the caller sees,
-    # instead of data quietly going missing.
-    model_config = ConfigDict(extra="forbid")
+class FlagBase(BaseModel):
+    """The fields a client sends and the API returns alike.
+
+    They are split out of `FlagCreate` because a flag is read back under
+    rules it was not necessarily written under. Rows predate the taxonomy --
+    four of them still say `"string"` -- and the clients that write them are
+    not all ours to deploy. Tightening the input would otherwise make reading
+    those rows fail, turning a stricter form into a 500 on `GET /flags`.
+    """
 
     barcode: str | None = Field(
         None,
@@ -274,15 +262,88 @@ class FlagCreate(BaseModel):
     flavor: Flavor = Field(
         ..., description="Flavor (project) associated with the ticket"
     )
+    # Lenient on purpose, on the way in as well as on the way out: an
+    # unknown reason is logged and kept rather than refused, so that a client
+    # we cannot deploy with does not start failing the day the list changes.
+    # `ReasonType` is what the form offers and what the filters accept.
     reason: str | None = Field(
         None,
         min_length=1,
-        description="Reason for flagging provided by the user. The field is optional.",
+        description="Why the content was reported, from the list `GET /reasons` "
+        "serves. The field is optional.",
+        examples=["wrong_barcode"],
     )
     comment: str | None = Field(
         None,
         description="Comment provided by the user during flagging. This is a free text field.",
     )
+    extra_data: dict[str, Any] | None = Field(
+        None,
+        description="Structured details about the report. Which keys are "
+        "accepted depends on `reason`, and unknown ones are refused. Every key "
+        "is optional: a flag carrying only `reason` and `comment` stays valid. "
+        "`GET /reasons` describes the keys each reason takes.",
+        examples=[{"correct_barcode": "4335619032118"}],
+    )
+
+
+class FlagCreate(FlagBase):
+    # What a flag records about itself -- when it was created, which product
+    # revision it was raised on -- is assigned by the server, and a client
+    # cannot pass it. Unknown fields are refused rather than dropped, so that
+    # trying to (or misspelling `comment`) is an error the caller sees,
+    # instead of data quietly going missing.
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_extra_data(self) -> "FlagCreate":
+        """Check `extra_data` against the schema its `reason` allows.
+
+        The reason lives outside `extra_data`, and Pydantic cannot
+        discriminate a union on a field that is not in it -- so the schema is
+        looked up rather than tagged. That also keeps the error about the key
+        the caller got wrong, instead of about a union with fifteen branches.
+        """
+        if self.extra_data is None:
+            return self
+        if self.reason is None:
+            raise ValueError("`extra_data` needs a `reason` to be read against")
+        try:
+            reason = ReasonType(self.reason)
+        except ValueError:
+            raise ValueError(
+                f"`extra_data` is not accepted for the unknown reason `{self.reason}`"
+            ) from None
+        # Most reasons have no entry: they take nothing beyond `comment`.
+        model = EXTRA_DATA_MODELS.get(reason)
+        if model is None:
+            raise ValueError(f"`extra_data` is not accepted for reason `{self.reason}`")
+        parsed = model.model_validate(self.extra_data)
+        # Stored the way it will be read: `mode="json"` keeps
+        # `**flag.model_dump()` below handing the JSON column values it can
+        # serialize, whatever a field is typed as. `exclude_none` keeps the
+        # unanswered questions out of the row entirely, so that "not asked"
+        # and "answered nothing" do not have to be told apart.
+        self.extra_data = parsed.model_dump(mode="json", exclude_none=True) or None
+        return self
+
+    @model_validator(mode="after")
+    def warn_about_an_unknown_reason(self) -> "FlagCreate":
+        """Record, without refusing, a reason outside the taxonomy.
+
+        The mobile app has been filing flags with the reason `"string"`, and
+        it is not deployed from this repository. Refusing those outright
+        would break reporting for everyone using it, so they are counted
+        first and refused once the logs are quiet.
+        """
+        if self.reason is not None and self.reason not in VALID_REASONS:
+            logger.warning(
+                "Flag from %s (%s) carries the unknown reason %r",
+                self.source,
+                self.user_id,
+                self.reason,
+            )
+        return self
 
     @model_validator(mode="after")
     def image_id_is_provided_when_type_is_image(self) -> "FlagCreate":
@@ -337,7 +398,7 @@ class FlagCreate(BaseModel):
         return data
 
 
-class Flag(FlagCreate):
+class Flag(FlagBase):
     id: int = Field(..., description="ID of the flag")
     ticket_id: int = Field(..., description="ID of the ticket associated with the flag")
     device_id: str = Field(..., description="Device ID of the flagger")
@@ -383,6 +444,69 @@ def _capture_product_snapshot(flag: FlagCreate, with_image: bool) -> ProductSnap
         return ProductSnapshot()
     image_id = _flagged_image_id(flag) if with_image else None
     return fetch_product_snapshot(flag.barcode, flag.flavor, image_id)
+
+
+class ReasonDescription(BaseModel):
+    """One reason, and what a report filed under it can carry."""
+
+    value: ReasonType = Field(..., description="Value to send as a flag's `reason`")
+    types: list[IssueType] = Field(
+        ...,
+        description="Types of issue the flag form offers this reason for. It "
+        "is not enforced: the API accepts any reason for any type, because "
+        "the clients disagree on the point.",
+    )
+    bot_only: bool = Field(
+        ...,
+        description="Whether the reason belongs to an automated source and is "
+        "not offered to people.",
+    )
+    extra_data_schema: dict[str, Any] | None = Field(
+        ...,
+        description="JSON Schema of the `extra_data` this reason accepts, or "
+        "null when it accepts none.",
+    )
+
+
+class GetReasonsResponse(BaseModel):
+    reasons: list[ReasonDescription]
+
+
+@api_v1_router.get("/reasons")
+def get_reasons() -> GetReasonsResponse:
+    """List the reasons a flag can be filed under.
+
+    Served so that a client does not have to keep its own copy of the
+    taxonomy in step with this one -- which is what went wrong before: the
+    form, the filters and this API each had a list, and filtering by a reason
+    the form actually submitted answered 422.
+
+    Open to anyone logged in: it describes the form, and holds no report.
+    """
+    types_by_reason: dict[ReasonType, list[IssueType]] = {
+        reason: [] for reason in ReasonType
+    }
+    for issue_type, reasons in REASONS_BY_TYPE.items():
+        for reason in reasons:
+            types_by_reason[reason].append(issue_type)
+
+    reasons = []
+    for reason in ReasonType:
+        # Not every reason takes extra data, and the ones that do not are
+        # still part of the list the form is built from.
+        model = EXTRA_DATA_MODELS.get(reason)
+        reasons.append(
+            ReasonDescription(
+                value=reason,
+                types=types_by_reason[reason],
+                bot_only=reason in BOT_ONLY_REASONS,
+                extra_data_schema=(
+                    model.model_json_schema() if model is not None else None
+                ),
+            )
+        )
+
+    return GetReasonsResponse(reasons=reasons)
 
 
 @api_v1_router.post("/flags")
