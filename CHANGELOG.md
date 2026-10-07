@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.4.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.3.0...v1.4.0) (2026-10-04)
+
+
+### Features
+
+* Add API to delete images in a single call ([#193](https://github.com/openfoodfacts/nutripatrol/issues/193)) ([cc6b013](https://github.com/openfoodfacts/nutripatrol/commit/cc6b013d8fa94eda772794661e8dd6e92cbce8d9))
+* Add GitHub Action to notify SDK repositories of API changes on release ([#134](https://github.com/openfoodfacts/nutripatrol/issues/134)) ([5d1f1ce](https://github.com/openfoodfacts/nutripatrol/commit/5d1f1cec16219dc4f964b1460ee7fca855ce3160))
+* **api:** flag reason taxonomy and structured extra_data ([#198](https://github.com/openfoodfacts/nutripatrol/issues/198)) ([576e94b](https://github.com/openfoodfacts/nutripatrol/commit/576e94b860bbda6c29bcdffc6ecace143c909cdd))
+
+
+### Bug Fixes
+
+* **api:** never match an empty user id when filtering flags ([#194](https://github.com/openfoodfacts/nutripatrol/issues/194)) ([fb001f1](https://github.com/openfoodfacts/nutripatrol/commit/fb001f118d603ccef382a4882a2a9ddb4a7186ff))
+* permissions for merge conflict autolabel ([10029cb](https://github.com/openfoodfacts/nutripatrol/commit/10029cb309f4cf1fc0e6f85cb9abba344433d00b))
+* permissions for merge conflict autolabel ([#176](https://github.com/openfoodfacts/nutripatrol/issues/176)) ([10029cb](https://github.com/openfoodfacts/nutripatrol/commit/10029cb309f4cf1fc0e6f85cb9abba344433d00b))
+* permissions for semantic PRs action ([5bc2ca7](https://github.com/openfoodfacts/nutripatrol/commit/5bc2ca718208129b692e55f2551fc6033b41eb88))
+* permissions for semantic PRs action ([#177](https://github.com/openfoodfacts/nutripatrol/issues/177)) ([5bc2ca7](https://github.com/openfoodfacts/nutripatrol/commit/5bc2ca718208129b692e55f2551fc6033b41eb88))
+* permissions for top issues ([1e18e43](https://github.com/openfoodfacts/nutripatrol/commit/1e18e436579d3f9ed0078c075043f004e64313ba))
+* permissions for top issues ([#173](https://github.com/openfoodfacts/nutripatrol/issues/173)) ([1e18e43](https://github.com/openfoodfacts/nutripatrol/commit/1e18e436579d3f9ed0078c075043f004e64313ba))
+* typo in changelog ([#158](https://github.com/openfoodfacts/nutripatrol/issues/158)) ([adbe0dd](https://github.com/openfoodfacts/nutripatrol/commit/adbe0ddc7b17df7d7dc0ddc67876bfe8399d83f2))
+* workflow permissions for .github/workflows/container-build.yml ([#190](https://github.com/openfoodfacts/nutripatrol/issues/190)) ([83a7a6b](https://github.com/openfoodfacts/nutripatrol/commit/83a7a6ba7e33dd84bdb56f775560c3d9d534dd9f))
+* workflow permissions for .github/workflows/container-deploy.yml ([#188](https://github.com/openfoodfacts/nutripatrol/issues/188)) ([0cccb65](https://github.com/openfoodfacts/nutripatrol/commit/0cccb65bbd4109d333ba7a632857eac30b2df803))
+* workflow permissions for .github/workflows/pre-commit.yml ([#189](https://github.com/openfoodfacts/nutripatrol/issues/189)) ([bfac6a7](https://github.com/openfoodfacts/nutripatrol/commit/bfac6a729bb16f144d40c84e8c587e694ae9d1fc))
+* workflow permissions for .github/workflows/release-please.yml ([#191](https://github.com/openfoodfacts/nutripatrol/issues/191)) ([8a47a8a](https://github.com/openfoodfacts/nutripatrol/commit/8a47a8a093bddc5ac8fe04a4befeb2f330c05df6))
+
 ## [1.3.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.2.1...v1.3.0) (2026-04-01)
 
 
