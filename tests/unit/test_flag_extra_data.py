@@ -155,6 +155,22 @@ def test_a_key_the_reason_does_not_accept_is_refused(database, logged_in):
     assert "correct_barcodes" in response.text
 
 
+def test_not_a_product_names_the_project_it_belongs_on(database, logged_in):
+    response = post_flag(reason="not_a_product", extra_data={"correct_flavor": "obf"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["extra_data"] == {"correct_flavor": "obf"}
+
+
+def test_not_a_product_refuses_a_project_that_does_not_exist(database, logged_in):
+    response = post_flag(
+        reason="not_a_product", extra_data={"correct_flavor": "off-pro"}
+    )
+
+    assert response.status_code == 422
+    assert "correct_flavor" in response.text
+
+
 def test_extra_data_is_refused_for_a_reason_that_takes_none(database, logged_in):
     response = post_flag(reason="human", extra_data={"correct_barcode": OTHER_BARCODE})
 

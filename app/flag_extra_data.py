@@ -54,6 +54,17 @@ class WrongBarcodeExtra(ExtraData):
     )
 
 
+class NotAProductExtra(ExtraData):
+    # The pro platform is not listed: it is Open Food Facts seen by producers,
+    # so a product cannot be moved there.
+    correct_flavor: Literal["off", "obf", "opff", "opf"] | None = Field(
+        None,
+        description="The project the product belongs on: Open Food Facts "
+        "(off), Open Beauty Facts (obf), Open Pet Food Facts (opff) or Open "
+        "Products Facts (opf).",
+    )
+
+
 class CopyrightExtra(ExtraData):
     # 193 reports in prose, and none under this reason, because the reason was
     # added after they were filed. Naming the uploader is the point: the same
@@ -103,6 +114,7 @@ class PersonalInfoExtra(ExtraData):
 EXTRA_DATA_MODELS: dict[ReasonType, type[ExtraData]] = {
     # product
     ReasonType.wrong_barcode: WrongBarcodeExtra,
+    ReasonType.not_a_product: NotAProductExtra,
     # image
     ReasonType.copyright: CopyrightExtra,
     ReasonType.wrong_product: WrongProductExtra,

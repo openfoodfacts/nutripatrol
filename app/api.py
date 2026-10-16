@@ -30,9 +30,11 @@ from app.flag_reasons import (
 )
 from app.middleware.auth import (
     AuthenticatedUser,
+    ModeratorSession,
     UserStatus,
     authenticated_user,
     get_auth_dependency,
+    moderator_session,
 )
 from app.models import FlagModel, ModeratorActionModel, TicketModel, db
 from app.moderation_api import off_api_error_handler
@@ -42,6 +44,7 @@ from app.off_api import (
     ProductSnapshot,
     fetch_image_upload_metadata,
     fetch_product_snapshot,
+    update_product,
 )
 from app.utils import init_sentry
 
@@ -864,6 +867,83 @@ def update_ticket_status(
     """
     with db:
         return _update_ticket_status(ticket_id, status, user_id)
+
+
+#: The `product_type` Open Food Facts stores for each project a product can
+#: be moved to. Saving a product with another type moves it to that project's
+#: server. The pro platform is absent: it is Open Food Facts seen by
+#: producers, not a project of its own.
+PRODUCT_TYPE_BY_FLAVOR = {
+    Flavor.off: "food",
+    Flavor.obf: "beauty",
+    Flavor.opff: "petfood",
+    Flavor.opf: "product",
+}
+
+
+class MoveProductRequest(BaseModel):
+    flavor: Literal[Flavor.off, Flavor.obf, Flavor.opff, Flavor.opf] = Field(
+        ..., description="Flavor (project) to move the product to"
+    )
+    comment: str | None = Field(
+        None, description="Reason for the move, recorded in the product history"
+    )
+
+
+@api_v1_router.post("/tickets/{ticket_id}/move_product")
+def move_ticket_product(
+    ticket_id: int,
+    body: MoveProductRequest,
+    session: ModeratorSession = Depends(moderator_session),
+) -> Ticket:
+    """Move the product of a ticket to another project, and close the ticket
+    as fixed.
+
+    This is how a `not_a_product` report is resolved: a cosmetic reported on
+    Open Food Facts goes to Open Beauty Facts. The product is moved first, and
+    the ticket is only closed once Open Food Facts has accepted the move, so a
+    failure leaves it open.
+
+    The ticket keeps the flavor it was reported on, which is where the flags
+    were raised.
+    """
+    with db:
+        try:
+            ticket = TicketModel.get_by_id(ticket_id)
+        except DoesNotExist:
+            raise HTTPException(status_code=404, detail="Not found")
+        if ticket.barcode is None:
+            raise HTTPException(
+                status_code=400, detail="This ticket is not about a product"
+            )
+        if ticket.flavor == Flavor.off_pro.value:
+            raise HTTPException(
+                status_code=400,
+                detail="A product of the pro platform is moved from Open Food Facts",
+            )
+        if ticket.flavor == body.flavor.value:
+            raise HTTPException(
+                status_code=400, detail="The product is already on this project"
+            )
+
+        update_product(
+            ticket.barcode,
+            {"product_type": PRODUCT_TYPE_BY_FLAVOR[body.flavor]},
+            ticket.flavor,
+            session.session_cookie,
+            comment=body.comment,
+        )
+        logger.info(
+            "%s moved %s from %s to %s",
+            session.user_id,
+            ticket.barcode,
+            ticket.flavor,
+            body.flavor.value,
+        )
+        ticket = _update_ticket_status(
+            ticket_id, TicketStatus.closed_fixed, session.user_id
+        )
+        return model_to_dict(ticket)
 
 
 class ModeratorAction(BaseModel):
