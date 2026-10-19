@@ -212,6 +212,25 @@ def test_a_user_cannot_read_a_ticket_they_did_not_flag(database, act_as):
     assert response.status_code == 404, response.text
 
 
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "page_size=0",
+        "page_size=-1",
+        "page=0",
+        "page=-1",
+    ],
+)
+def test_ticket_list_rejects_invalid_pagination(database, act_as, query):
+    """Pagination parameters must be positive integers."""
+    act_as("mod", moderator=1)
+
+    response = request("GET", f"/api/v1/tickets?{query}")
+
+    assert response.status_code == 422, response.text
+
+
 def test_a_user_lists_the_tickets_they_flagged_only(database, act_as):
     alice_flag = flag_of(act_as, "alice")
     flag_of(act_as, "bob", barcode=OTHER_BARCODE)
