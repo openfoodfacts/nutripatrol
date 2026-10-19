@@ -212,7 +212,6 @@ def test_a_user_cannot_read_a_ticket_they_did_not_flag(database, act_as):
     assert response.status_code == 404, response.text
 
 
-
 @pytest.mark.parametrize(
     "query",
     [
@@ -228,6 +227,24 @@ def test_ticket_list_rejects_invalid_pagination(database, act_as, query):
 
     response = request("GET", f"/api/v1/tickets?{query}")
 
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "page=0",
+        "page=-1",
+        "page_size=0",
+        "page_size=-1",
+    ],
+)
+def test_ticket_actions_reject_invalid_pagination(database, act_as, query):
+    flag = flag_of(act_as, "alice")
+    response = request(
+        "GET",
+        f"/api/v1/tickets/{flag['ticket_id']}/actions?{query}",
+    )
     assert response.status_code == 422, response.text
 
 
