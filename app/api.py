@@ -712,8 +712,8 @@ def get_tickets(
     reason: Annotated[list[ReasonType] | None, Query()] = None,
     sort_by: str = "created_at",
     sort_order: Literal["asc", "desc"] = "desc",
-    page: int = 1,
-    page_size: int = 10,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1)] = 10,
     user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetTicketsResponse:
     """Get all tickets.
@@ -991,8 +991,8 @@ def _list_moderator_actions(
 @api_v1_router.get("/tickets/{ticket_id}/actions")
 def get_ticket_actions(
     ticket_id: int,
-    page: int = 1,
-    page_size: int = 10,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1)] = 10,
     user: AuthenticatedUser = Depends(authenticated_user),
 ) -> GetModeratorActionsResponse:
     """Get the moderation history of a ticket, most recent first.
@@ -1009,8 +1009,8 @@ def get_ticket_actions(
 
 @api_v1_router.get("/moderator_actions/me")
 def get_my_actions(
-    page: int = 1,
-    page_size: int = 10,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1)] = 10,
     user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
 ) -> GetModeratorActionsResponse:
     """Get the moderation history of the current user, most recent first."""
