@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.4.0...v1.5.0) (2026-10-20)
+
+
+### Features
+
+* Add an API rout to close ticket about wrong category ([#201](https://github.com/openfoodfacts/nutripatrol/issues/201)) ([8ad943a](https://github.com/openfoodfacts/nutripatrol/commit/8ad943aa094a840669152419c062c7e9202ead13))
+
 ## [1.4.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.3.0...v1.4.0) (2026-10-04)
 
 
