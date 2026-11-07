@@ -707,7 +707,7 @@ TICKET_SORTABLE_FIELDS = {
 def get_tickets(
     barcode: str | None = None,
     status: TicketStatus | None = None,
-    type_: IssueType | None = None,
+    type_: Annotated[list[IssueType] | None, Query()] = None,
     flavor: Flavor | None = None,
     reason: Annotated[list[ReasonType] | None, Query()] = None,
     sort_by: str = "created_at",
@@ -720,6 +720,8 @@ def get_tickets(
 
     A moderator lists every ticket. Any other logged-in user lists only the
     tickets one of their own flags is attached to.
+    Repeat `type_` to select several types, for example
+    `?type_=product&type_=image`. A single value still selects just that type.
     """
     if sort_by not in TICKET_SORTABLE_FIELDS:
         raise HTTPException(
@@ -735,7 +737,7 @@ def get_tickets(
         if status:
             where_clause.append(TicketModel.status == status)
         if type_:
-            where_clause.append(TicketModel.type == type_)
+            where_clause.append(TicketModel.type.in_(type_))
         if flavor:
             where_clause.append(TicketModel.flavor == flavor)
         # Both the tickets a plain user may see and the `reason` filter
