@@ -16,12 +16,12 @@ from peewee import SqliteDatabase
 from app import api as api_module
 from app.api import app
 from app.middleware import auth as auth_module
-from app.models import FlagModel, ModeratorActionModel, TicketModel
+from app.models import FlagModel, ModeratorActionModel, TicketCommentModel, TicketModel
 from app.off_api import ProductSnapshot
 
 BARCODE = "3017620422003"
 OTHER_BARCODE = "4335619032118"
-MODELS = [TicketModel, FlagModel, ModeratorActionModel]
+MODELS = [TicketModel, FlagModel, ModeratorActionModel, TicketCommentModel]
 
 
 @pytest.fixture

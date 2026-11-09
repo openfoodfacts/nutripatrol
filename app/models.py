@@ -79,6 +79,29 @@ class ModeratorActionModel(Model):
         table_name = "moderator_actions"
 
 
+class TicketCommentModel(Model):
+    """A comment a moderator wrote on a ticket.
+
+    Every comment is recorded with a moderator action of its own, of type
+    `comment`, so that it takes its place in the ticket history and in the
+    moderator's own list of actions. `ticket`, `user_id` and `created_at`
+    repeat the action's, so that listing the comments of a ticket stays a
+    single-table query.
+    """
+
+    ticket = ForeignKeyField(TicketModel, backref="comments", index=True)
+    moderator_action = ForeignKeyField(
+        ModeratorActionModel, backref="comment", unique=True
+    )
+    user_id = TextField()
+    text = TextField()
+    created_at = DateTimeField()
+
+    class Meta:
+        database = db
+        table_name = "ticket_comments"
+
+
 class FlagModel(Model):
     ticket = ForeignKeyField(TicketModel, backref="flags")
     barcode = TextField(null=True)
