@@ -15,7 +15,7 @@ from fastapi_cache.backends.inmemory import InMemoryBackend
 from openfoodfacts import Flavor
 from openfoodfacts.images import generate_image_url
 from openfoodfacts.utils import URLBuilder, get_logger
-from peewee import DoesNotExist, fn
+from peewee import JOIN, DoesNotExist, fn
 from playhouse.shortcuts import model_to_dict
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -38,8 +38,10 @@ from app.middleware.auth import (
 )
 from app.models import (
     FlagModel,
+    LabelModel,
     ModeratorActionModel,
     TicketCommentModel,
+    TicketLabelModel,
     TicketModel,
     db,
 )
@@ -95,6 +97,12 @@ A ticket containes the following main fields:
 
 Moderators can comment on a ticket (`POST /tickets/{ticket_id}/comments`), or comment and close it in one call (`POST /tickets/{ticket_id}/close_with_comment`). A comment is recorded as a moderator action of type `comment`, so it appears in the ticket history; closing with a comment records the comment, then the status change one millisecond later. Comments are visible to the moderators and to the users who flagged the ticket.
 
+## Labels
+
+Moderators sort tickets with labels: `GET /labels` lists them, `POST /labels` creates one (or returns the label that already has the name, whatever its case), and `PATCH /labels/{label_id}` renames or recolors it. Labels cannot be deleted. `POST` and `DELETE /tickets/{ticket_id}/labels/{label_id}` put a label on a ticket or take it off, recorded as `label_added` and `label_removed` moderator actions. `GET /tickets?label=1&label=2` lists the tickets with any of the labels.
+
+Labels are internal to moderation: only moderators see them on tickets, and label changes are left out of the history other users read.
+
 ## Moderation actions
 
 Closing a ticket only records what a moderator decided; acting on it means editing Open Food Facts. The `/products/{barcode}/...` endpoints do that server-side, so that a client does not have to know the Open Food Facts endpoints, which flavor a product lives on, or how each of them reports a failure:
@@ -117,7 +125,7 @@ Every endpoint requires an Open Food Facts session. Moderators see everything. A
 - `GET /tickets/{ticket_id}/actions`: the moderation history of those tickets, so that a flagger can see what was done about their report.
 - `GET /tickets/{ticket_id}/comments`: the comments moderators wrote on those tickets.
 
-Closing a ticket, commenting on it, and everything under `/products/{barcode}/...`, stays with the moderators, as do `GET /stats` and `GET /moderator_actions/me`.
+Closing a ticket, commenting on it, labelling it, `/labels`, and everything under `/products/{barcode}/...`, stays with the moderators, as do `GET /stats` and `GET /moderator_actions/me`.
 
 """
 
@@ -209,6 +217,39 @@ class ActionType(StrEnum):
     # A moderator commented on the ticket. The comment itself is in
     # `ticket_comments`, linked to the action.
     comment = "comment"
+    # A moderator put a label on the ticket, or took it off. The action is
+    # linked to the label.
+    label_added = "label_added"
+    label_removed = "label_removed"
+
+
+#: The actions only moderators see: labels are internal to moderation.
+MODERATOR_ONLY_ACTION_TYPES = (ActionType.label_added, ActionType.label_removed)
+
+#: The colors a label can take, from the MUI palette the frontend draws with.
+LabelColor = Literal[
+    "default", "primary", "secondary", "error", "info", "success", "warning"
+]
+
+
+class Label(BaseModel):
+    id: int = Field(..., description="ID of the label")
+    name: str = Field(..., description="Name of the label")
+    color: LabelColor | None = Field(None, description="Color of the label")
+    created_by: str = Field(
+        ..., description="Open Food Facts User ID of the moderator who created it"
+    )
+    created_at: datetime = Field(..., description="When the label was created")
+
+
+def _label_as_response(label: LabelModel) -> Label:
+    return Label(
+        id=label.id,
+        name=label.name,
+        color=label.color,
+        created_by=label.created_by,
+        created_at=label.created_at,
+    )
 
 
 class TicketCreate(BaseModel):
@@ -248,6 +289,11 @@ class Ticket(TicketCreate):
     )
     comment_count: int = Field(
         0, description="Number of comments moderators wrote on the ticket"
+    )
+    labels: list[Label] = Field(
+        default_factory=list,
+        description="Labels moderators put on the ticket. Only moderators see "
+        "them: the list is empty for anyone else.",
     )
 
 
@@ -732,8 +778,35 @@ def _with_comment_counts(tickets: list[dict]) -> list[dict]:
     ]
 
 
-def _ticket_as_response(ticket: TicketModel) -> dict:
-    return _with_comment_counts([model_to_dict(ticket)])[0]
+def _with_labels(tickets: list[dict]) -> list[dict]:
+    """Add its `labels` to each ticket, in one query for all of them."""
+    ticket_ids = [ticket["id"] for ticket in tickets]
+    labels = defaultdict(list)
+    if ticket_ids:
+        query = (
+            TicketLabelModel.select(TicketLabelModel, LabelModel)
+            .join(LabelModel)
+            .where(TicketLabelModel.ticket.in_(ticket_ids))
+            .order_by(LabelModel.name_key)
+        )
+        for ticket_label in query:
+            labels[ticket_label.ticket_id].append(
+                _label_as_response(ticket_label.label)
+            )
+    return [{**ticket, "labels": labels.get(ticket["id"], [])} for ticket in tickets]
+
+
+def _tickets_as_response(tickets: list[dict], with_labels: bool) -> list[dict]:
+    """Add what a ticket response holds beyond the ticket row itself.
+
+    `with_labels` is for moderators only: labels are internal to moderation.
+    """
+    tickets = _with_comment_counts(tickets)
+    return _with_labels(tickets) if with_labels else tickets
+
+
+def _ticket_as_response(ticket: TicketModel, with_labels: bool = True) -> dict:
+    return _tickets_as_response([model_to_dict(ticket)], with_labels)[0]
 
 
 class GetTicketsResponse(BaseModel):
@@ -763,6 +836,7 @@ def get_tickets(
     type_: IssueType | None = None,
     flavor: Flavor | None = None,
     reason: Annotated[list[ReasonType] | None, Query()] = None,
+    label: Annotated[list[int] | None, Query()] = None,
     sort_by: str = "created_at",
     sort_order: Literal["asc", "desc"] = "desc",
     page: int = 1,
@@ -773,6 +847,9 @@ def get_tickets(
 
     A moderator lists every ticket. Any other logged-in user lists only the
     tickets one of their own flags is attached to.
+
+    `label` keeps the tickets that have any of the given labels. It is a
+    moderator filter, ignored for anyone else.
     """
     if sort_by not in TICKET_SORTABLE_FIELDS:
         raise HTTPException(
@@ -801,6 +878,11 @@ def get_tickets(
         if flag_clause:
             subquery = FlagModel.select(FlagModel.ticket_id).where(*flag_clause)
             where_clause.append(TicketModel.id.in_(subquery))
+        if label and user.is_moderator:
+            labelled = TicketLabelModel.select(TicketLabelModel.ticket_id).where(
+                TicketLabelModel.label.in_(label)
+            )
+            where_clause.append(TicketModel.id.in_(labelled))
 
         # peewee's .where() raises on zero arguments (reduce() of an empty
         # iterable), so only apply it when there is at least one filter --
@@ -818,8 +900,11 @@ def get_tickets(
         sort_field = TICKET_SORTABLE_FIELDS[sort_by]
         order_expr = sort_field.asc() if sort_order == "asc" else sort_field.desc()
         return GetTicketsResponse(
-            tickets=_with_comment_counts(
-                list(query.order_by(order_expr).offset(offset).limit(page_size).dicts())
+            tickets=_tickets_as_response(
+                list(
+                    query.order_by(order_expr).offset(offset).limit(page_size).dicts()
+                ),
+                with_labels=user.is_moderator,
             ),
             max_page=max_page,
             total=count,
@@ -837,7 +922,9 @@ def get_ticket(
     with db:
         _authorize_ticket_access(ticket_id, user)
         try:
-            return _ticket_as_response(TicketModel.get_by_id(ticket_id))
+            return _ticket_as_response(
+                TicketModel.get_by_id(ticket_id), with_labels=user.is_moderator
+            )
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Not found")
 
@@ -1184,6 +1271,181 @@ def close_ticket_with_comment(
         return _ticket_as_response(ticket)
 
 
+LabelName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
+]
+
+
+def _label_key(name: str) -> str:
+    """What makes two label names the same label: case does not count."""
+    return name.casefold()
+
+
+class LabelWithCount(Label):
+    ticket_count: int = Field(..., description="Number of tickets with the label")
+
+
+class GetLabelsResponse(BaseModel):
+    labels: list[LabelWithCount]
+
+
+class LabelCreate(BaseModel):
+    name: LabelName = Field(..., description="Name of the label")
+    color: LabelColor | None = Field(None, description="Color of the label")
+
+
+class LabelUpdate(BaseModel):
+    name: LabelName | None = Field(None, description="New name of the label")
+    color: LabelColor | None = Field(None, description="New color of the label")
+
+
+def _get_label_or_404(label_id: int) -> LabelModel:
+    try:
+        return LabelModel.get_by_id(label_id)
+    except DoesNotExist:
+        raise HTTPException(status_code=404, detail="Label not found")
+
+
+@api_v1_router.get("/labels")
+def get_labels(
+    _: str = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> GetLabelsResponse:
+    """Get every label, by name, with the number of tickets that have it."""
+    with db:
+        query = (
+            LabelModel.select(
+                LabelModel,
+                fn.COUNT(TicketLabelModel.id).alias("ticket_count"),
+            )
+            .join(TicketLabelModel, join_type=JOIN.LEFT_OUTER)
+            .group_by(LabelModel.id)
+            .order_by(LabelModel.name_key)
+        )
+        return GetLabelsResponse(
+            labels=[
+                LabelWithCount(
+                    **_label_as_response(label).model_dump(),
+                    ticket_count=label.ticket_count,
+                )
+                for label in query
+            ]
+        )
+
+
+@api_v1_router.post("/labels")
+def create_label(
+    body: LabelCreate,
+    user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> Label:
+    """Create a label.
+
+    If a label already has that name, whatever its case, it is returned
+    instead: two moderators creating "vandal" at once get the same label.
+    """
+    with db:
+        existing = LabelModel.get_or_none(LabelModel.name_key == _label_key(body.name))
+        if existing is not None:
+            return _label_as_response(existing)
+        label = LabelModel.create(
+            name=body.name,
+            name_key=_label_key(body.name),
+            color=body.color,
+            created_by=user_id,
+            created_at=datetime.utcnow(),
+        )
+        return _label_as_response(label)
+
+
+@api_v1_router.patch("/labels/{label_id}")
+def update_label(
+    label_id: int,
+    body: LabelUpdate,
+    _: str = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> Label:
+    """Rename or recolor a label. Labels cannot be deleted."""
+    with db:
+        label = _get_label_or_404(label_id)
+        if body.name is not None:
+            key = _label_key(body.name)
+            taken = LabelModel.get_or_none(
+                (LabelModel.name_key == key) & (LabelModel.id != label_id)
+            )
+            if taken is not None:
+                raise HTTPException(
+                    status_code=409, detail="Another label already has this name"
+                )
+            label.name, label.name_key = body.name, key
+        if body.color is not None:
+            label.color = body.color
+        label.save()
+        return _label_as_response(label)
+
+
+def _record_label_action(
+    ticket: TicketModel, label: LabelModel, action_type: ActionType, user_id: str
+) -> None:
+    ModeratorActionModel.create(
+        ticket=ticket,
+        user_id=user_id,
+        action_type=action_type,
+        label=label,
+        created_at=datetime.utcnow(),
+    )
+
+
+@api_v1_router.post("/tickets/{ticket_id}/labels/{label_id}")
+def add_ticket_label(
+    ticket_id: int,
+    label_id: int,
+    user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> Ticket:
+    """Put a label on a ticket, recorded as a `label_added` action.
+
+    Nothing happens, and no action is recorded, if the ticket already has it.
+    """
+    with db:
+        ticket = _get_ticket_or_404(ticket_id)
+        label = _get_label_or_404(label_id)
+        with db.atomic():
+            already = TicketLabelModel.get_or_none(ticket=ticket_id, label=label_id)
+            if already is None:
+                TicketLabelModel.create(
+                    ticket=ticket,
+                    label=label,
+                    user_id=user_id,
+                    created_at=datetime.utcnow(),
+                )
+                _record_label_action(ticket, label, ActionType.label_added, user_id)
+        return _ticket_as_response(ticket)
+
+
+@api_v1_router.delete("/tickets/{ticket_id}/labels/{label_id}")
+def remove_ticket_label(
+    ticket_id: int,
+    label_id: int,
+    user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> Ticket:
+    """Take a label off a ticket, recorded as a `label_removed` action.
+
+    Nothing happens, and no action is recorded, if the ticket does not have it.
+    """
+    with db:
+        ticket = _get_ticket_or_404(ticket_id)
+        label = _get_label_or_404(label_id)
+        with db.atomic():
+            removed = (
+                TicketLabelModel.delete()
+                .where(
+                    (TicketLabelModel.ticket == ticket_id)
+                    & (TicketLabelModel.label == label_id)
+                )
+                .execute()
+            )
+            if removed:
+                _record_label_action(ticket, label, ActionType.label_removed, user_id)
+        return _ticket_as_response(ticket)
+
+
 class ModeratorAction(BaseModel):
     id: int = Field(..., description="ID of the moderator action")
     action_type: ActionType = Field(
@@ -1195,6 +1457,11 @@ class ModeratorAction(BaseModel):
     created_at: datetime = Field(..., description="When the action was taken")
     comment: TicketComment | None = Field(
         None, description="The comment, on a `comment` action"
+    )
+    label: Label | None = Field(
+        None,
+        description="The label added or removed, on `label_added` and "
+        "`label_removed` actions",
     )
 
 
@@ -1231,6 +1498,14 @@ def _list_moderator_actions(
                 TicketCommentModel.moderator_action.in_([a.id for a in actions])
             )
         }
+    # Their labels, in one query too.
+    label_ids = {a.label_id for a in actions if a.label_id is not None}
+    labels = {}
+    if label_ids:
+        labels = {
+            label.id: _label_as_response(label)
+            for label in LabelModel.select().where(LabelModel.id.in_(label_ids))
+        }
     return GetModeratorActionsResponse(
         actions=[
             ModeratorAction(
@@ -1240,6 +1515,7 @@ def _list_moderator_actions(
                 ticket_id=action.ticket_id,
                 created_at=action.created_at,
                 comment=comments.get(action.id),
+                label=labels.get(action.label_id),
             )
             for action in actions
         ],
@@ -1257,13 +1533,17 @@ def get_ticket_actions(
     """Get the moderation history of a ticket, most recent first.
 
     Readable by the moderators, and by the users who flagged the ticket: what
-    was done about a report is answered to whoever made it.
+    was done about a report is answered to whoever made it. Label changes are
+    left out for the latter, as labels are internal to moderation.
     """
     with db:
         _authorize_ticket_access(ticket_id, user)
-        return _list_moderator_actions(
-            [ModeratorActionModel.ticket == ticket_id], page, page_size
-        )
+        where_clause = [ModeratorActionModel.ticket == ticket_id]
+        if not user.is_moderator:
+            where_clause.append(
+                ModeratorActionModel.action_type.not_in(MODERATOR_ONLY_ACTION_TYPES)
+            )
+        return _list_moderator_actions(where_clause, page, page_size)
 
 
 @api_v1_router.get("/moderator_actions/me")
