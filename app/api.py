@@ -17,7 +17,7 @@ from openfoodfacts.images import generate_image_url
 from openfoodfacts.utils import URLBuilder, get_logger
 from peewee import DoesNotExist, fn
 from playhouse.shortcuts import model_to_dict
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.config import settings
 from app.flag_extra_data import EXTRA_DATA_MODELS
@@ -36,7 +36,13 @@ from app.middleware.auth import (
     get_auth_dependency,
     moderator_session,
 )
-from app.models import FlagModel, ModeratorActionModel, TicketModel, db
+from app.models import (
+    FlagModel,
+    ModeratorActionModel,
+    TicketCommentModel,
+    TicketModel,
+    db,
+)
 from app.moderation_api import off_api_error_handler
 from app.moderation_api import router as moderation_router
 from app.off_api import (
@@ -85,6 +91,10 @@ A ticket containes the following main fields:
 - `flavor`: Flavor (project) associated with the ticket.
 - `image_uploader` and `image_uploaded_at`: Open Food Facts User ID of the user who uploaded the flagged image, and upload date. Open Food Facts loses them once the image is deleted, so they are captured when the ticket is created, and captured again when a moderator closes it if they could not be read then. They are null if the image had already been deleted by then.
 
+## Comments
+
+Moderators can comment on a ticket (`POST /tickets/{ticket_id}/comments`), or comment and close it in one call (`POST /tickets/{ticket_id}/close_with_comment`). A comment is recorded as a moderator action of type `comment`, so it appears in the ticket history; closing with a comment records the comment, then the status change one millisecond later. Comments are visible to the moderators and to the users who flagged the ticket.
+
 ## Moderation actions
 
 Closing a ticket only records what a moderator decided; acting on it means editing Open Food Facts. The `/products/{barcode}/...` endpoints do that server-side, so that a client does not have to know the Open Food Facts endpoints, which flavor a product lives on, or how each of them reports a failure:
@@ -105,8 +115,9 @@ Every endpoint requires an Open Food Facts session. Moderators see everything. A
 - `GET /flags` and `GET /flags/{flag_id}`: the flags they raised. Someone else's flag answers `404`, the same as a flag that does not exist.
 - `GET /tickets` and `GET /tickets/{ticket_id}`: the tickets one of their flags is attached to. A ticket gathers the flags of everyone who reported the same product or image, so reaching it through one's own flag does not hand over the others: `POST /flags/batch` returns, of a shared ticket, only the caller's own flag.
 - `GET /tickets/{ticket_id}/actions`: the moderation history of those tickets, so that a flagger can see what was done about their report.
+- `GET /tickets/{ticket_id}/comments`: the comments moderators wrote on those tickets.
 
-Closing a ticket, and everything under `/products/{barcode}/...`, stays with the moderators, as do `GET /stats` and `GET /moderator_actions/me`.
+Closing a ticket, commenting on it, and everything under `/products/{barcode}/...`, stays with the moderators, as do `GET /stats` and `GET /moderator_actions/me`.
 
 """
 
@@ -183,6 +194,23 @@ CLOSED_TICKET_STATUSES = frozenset(
 )
 
 
+class ActionType(StrEnum):
+    """What a moderator action did.
+
+    A status change is recorded under the status it set, which is why the
+    first four values are the ticket statuses. The others record what was
+    done to a ticket without changing its status.
+    """
+
+    open = TicketStatus.open.value
+    closed = TicketStatus.closed.value
+    closed_no_issue = TicketStatus.closed_no_issue.value
+    closed_fixed = TicketStatus.closed_fixed.value
+    # A moderator commented on the ticket. The comment itself is in
+    # `ticket_comments`, linked to the action.
+    comment = "comment"
+
+
 class TicketCreate(BaseModel):
     barcode: str | None = Field(
         None,
@@ -217,6 +245,9 @@ class Ticket(TicketCreate):
     )
     image_uploaded_at: datetime | None = Field(
         None, description="Upload datetime of the flagged image"
+    )
+    comment_count: int = Field(
+        0, description="Number of comments moderators wrote on the ticket"
     )
 
 
@@ -683,6 +714,28 @@ def _create_ticket(ticket: TicketCreate, snapshot: ProductSnapshot):
     )
 
 
+def _with_comment_counts(tickets: list[dict]) -> list[dict]:
+    """Add its `comment_count` to each ticket, in one query for all of them."""
+    ticket_ids = [ticket["id"] for ticket in tickets]
+    counts = {}
+    if ticket_ids:
+        counts = dict(
+            TicketCommentModel.select(
+                TicketCommentModel.ticket, fn.COUNT(TicketCommentModel.id)
+            )
+            .where(TicketCommentModel.ticket.in_(ticket_ids))
+            .group_by(TicketCommentModel.ticket)
+            .tuples()
+        )
+    return [
+        {**ticket, "comment_count": counts.get(ticket["id"], 0)} for ticket in tickets
+    ]
+
+
+def _ticket_as_response(ticket: TicketModel) -> dict:
+    return _with_comment_counts([model_to_dict(ticket)])[0]
+
+
 class GetTicketsResponse(BaseModel):
     """Response model for get_tickets endpoint."""
 
@@ -765,8 +818,8 @@ def get_tickets(
         sort_field = TICKET_SORTABLE_FIELDS[sort_by]
         order_expr = sort_field.asc() if sort_order == "asc" else sort_field.desc()
         return GetTicketsResponse(
-            tickets=list(
-                query.order_by(order_expr).offset(offset).limit(page_size).dicts()
+            tickets=_with_comment_counts(
+                list(query.order_by(order_expr).offset(offset).limit(page_size).dicts())
             ),
             max_page=max_page,
             total=count,
@@ -784,7 +837,7 @@ def get_ticket(
     with db:
         _authorize_ticket_access(ticket_id, user)
         try:
-            return model_to_dict(TicketModel.get_by_id(ticket_id))
+            return _ticket_as_response(TicketModel.get_by_id(ticket_id))
         except DoesNotExist:
             raise HTTPException(status_code=404, detail="Not found")
 
@@ -833,9 +886,15 @@ def _capture_image_upload_metadata_if_needed(ticket: TicketModel) -> None:
 
 
 def _update_ticket_status(
-    ticket_id: int, new_status: TicketStatus, user_id: str
+    ticket_id: int,
+    new_status: TicketStatus,
+    user_id: str,
+    at: datetime | None = None,
 ) -> TicketModel:
-    """Update a ticket's status and record who did it, if it changed."""
+    """Update a ticket's status and record who did it, if it changed.
+
+    `at` is when the action is recorded, now by default.
+    """
     try:
         ticket = TicketModel.get_by_id(ticket_id)
     except DoesNotExist:
@@ -850,7 +909,7 @@ def _update_ticket_status(
             ticket=ticket,
             user_id=user_id,
             action_type=new_status,
-            created_at=datetime.utcnow(),
+            created_at=at or datetime.utcnow(),
         )
     return ticket
 
@@ -866,7 +925,8 @@ def update_ticket_status(
     This function is used to update the status of a ticket by its ID.
     """
     with db:
-        return _update_ticket_status(ticket_id, status, user_id)
+        ticket = _update_ticket_status(ticket_id, status, user_id)
+        return _ticket_as_response(ticket)
 
 
 #: The `product_type` Open Food Facts stores for each project a product can
@@ -886,7 +946,9 @@ class MoveProductRequest(BaseModel):
         ..., description="Flavor (project) to move the product to"
     )
     comment: str | None = Field(
-        None, description="Reason for the move, recorded in the product history"
+        None,
+        description="Reason for the move, recorded in the product history. "
+        "It is also saved as a comment on the ticket, just before it is closed.",
     )
 
 
@@ -940,20 +1002,200 @@ def move_ticket_product(
             ticket.flavor,
             body.flavor.value,
         )
-        ticket = _update_ticket_status(
-            ticket_id, TicketStatus.closed_fixed, session.user_id
+        with db.atomic():
+            if body.comment and body.comment.strip():
+                ticket = _close_with_comment(
+                    ticket,
+                    TicketStatus.closed_fixed,
+                    body.comment.strip()[:COMMENT_MAX_LENGTH],
+                    session.user_id,
+                )
+            else:
+                ticket = _update_ticket_status(
+                    ticket_id, TicketStatus.closed_fixed, session.user_id
+                )
+        return _ticket_as_response(ticket)
+
+
+COMMENT_MAX_LENGTH = 2000
+
+CommentText = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=1, max_length=COMMENT_MAX_LENGTH
+    ),
+]
+
+
+class TicketComment(BaseModel):
+    id: int = Field(..., description="ID of the comment")
+    ticket_id: int = Field(..., description="ID of the ticket it was written on")
+    moderator_action_id: int = Field(
+        ..., description="ID of the `comment` moderator action it was recorded with"
+    )
+    user_id: str = Field(
+        ..., description="Open Food Facts User ID of the moderator who wrote it"
+    )
+    text: str = Field(..., description="The comment")
+    created_at: datetime = Field(..., description="When it was written")
+
+
+def _comment_as_response(comment: TicketCommentModel) -> TicketComment:
+    # Built by hand: peewee names the foreign keys after the Python
+    # attributes ("ticket"), not after the columns the API publishes.
+    return TicketComment(
+        id=comment.id,
+        ticket_id=comment.ticket_id,
+        moderator_action_id=comment.moderator_action_id,
+        user_id=comment.user_id,
+        text=comment.text,
+        created_at=comment.created_at,
+    )
+
+
+class CommentCreate(BaseModel):
+    text: CommentText = Field(
+        ...,
+        description="The comment. It is visible to the moderators, and to the "
+        "users who flagged the ticket.",
+    )
+
+
+class CloseWithCommentRequest(BaseModel):
+    status: Literal[TicketStatus.closed_no_issue, TicketStatus.closed_fixed] = Field(
+        ..., description="How the ticket is closed"
+    )
+    comment: CommentText = Field(
+        ..., description="Why, visible to the users who flagged the ticket too"
+    )
+
+
+class GetCommentsResponse(BaseModel):
+    comments: list[TicketComment]
+    total: int
+
+
+def _get_ticket_or_404(ticket_id: int) -> TicketModel:
+    try:
+        return TicketModel.get_by_id(ticket_id)
+    except DoesNotExist:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def _add_comment(
+    ticket: TicketModel, text: str, user_id: str, at: datetime | None = None
+) -> TicketCommentModel:
+    """Save a comment along with the `comment` action that records it."""
+    at = at or datetime.utcnow()
+    action = ModeratorActionModel.create(
+        ticket=ticket, user_id=user_id, action_type=ActionType.comment, created_at=at
+    )
+    return TicketCommentModel.create(
+        ticket=ticket,
+        moderator_action=action,
+        user_id=user_id,
+        text=text,
+        created_at=at,
+    )
+
+
+def _close_with_comment(
+    ticket: TicketModel, status: TicketStatus, text: str, user_id: str
+) -> TicketModel:
+    """Comment on a ticket, then close it.
+
+    The comment and the status change stay two actions. The close is stamped
+    one millisecond after the comment, so that the history, sorted by date,
+    always reads the comment first even though both are written at once.
+    Call it inside a transaction.
+    """
+    comment = _add_comment(ticket, text, user_id)
+    return _update_ticket_status(
+        ticket.id,
+        status,
+        user_id,
+        at=comment.created_at + timedelta(milliseconds=1),
+    )
+
+
+@api_v1_router.get("/tickets/{ticket_id}/comments")
+def get_ticket_comments(
+    ticket_id: int,
+    page: int = 1,
+    page_size: int = 100,
+    user: AuthenticatedUser = Depends(authenticated_user),
+) -> GetCommentsResponse:
+    """Get the comments of a ticket, oldest first.
+
+    Readable by the moderators, and by the users who flagged the ticket.
+    """
+    with db:
+        _authorize_ticket_access(ticket_id, user)
+        _get_ticket_or_404(ticket_id)
+        query = TicketCommentModel.select().where(
+            TicketCommentModel.ticket == ticket_id
         )
-        return model_to_dict(ticket)
+        total = query.count()
+        comments = (
+            query.order_by(TicketCommentModel.created_at, TicketCommentModel.id)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return GetCommentsResponse(
+            comments=[_comment_as_response(comment) for comment in comments],
+            total=total,
+        )
+
+
+@api_v1_router.post("/tickets/{ticket_id}/comments")
+def add_ticket_comment(
+    ticket_id: int,
+    body: CommentCreate,
+    user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> TicketComment:
+    """Comment on a ticket.
+
+    The comment is recorded as a `comment` moderator action. It is visible to
+    the moderators, and to the users who flagged the ticket.
+    """
+    with db:
+        ticket = _get_ticket_or_404(ticket_id)
+        with db.atomic():
+            comment = _add_comment(ticket, body.text, user_id)
+        return _comment_as_response(comment)
+
+
+@api_v1_router.post("/tickets/{ticket_id}/close_with_comment")
+def close_ticket_with_comment(
+    ticket_id: int,
+    body: CloseWithCommentRequest,
+    user_id: str = Depends(get_auth_dependency(UserStatus.isModerator)),
+) -> Ticket:
+    """Comment on a ticket and close it.
+
+    Two moderator actions are recorded: the comment, then the status change
+    one millisecond later. If the ticket already has that status, only the
+    comment is recorded.
+    """
+    with db:
+        ticket = _get_ticket_or_404(ticket_id)
+        with db.atomic():
+            ticket = _close_with_comment(ticket, body.status, body.comment, user_id)
+        return _ticket_as_response(ticket)
 
 
 class ModeratorAction(BaseModel):
     id: int = Field(..., description="ID of the moderator action")
-    action_type: TicketStatus = Field(
-        ..., description="The new ticket status this action set"
+    action_type: ActionType = Field(
+        ...,
+        description="What the action did: the ticket status it set, or `comment`",
     )
     user_id: str = Field(..., description="Open Food Facts User ID of the moderator")
     ticket_id: int = Field(..., description="ID of the ticket this action was taken on")
     created_at: datetime = Field(..., description="When the action was taken")
+    comment: TicketComment | None = Field(
+        None, description="The comment, on a `comment` action"
+    )
 
 
 class GetModeratorActionsResponse(BaseModel):
@@ -971,21 +1213,38 @@ def _list_moderator_actions(
     # Built from model instances rather than .dicts(): peewee's .dicts()
     # emits the FK column under the Python attribute name ("ticket"),
     # not the "ticket_id" the response model expects.
-    actions = [
-        ModeratorAction(
-            id=action.id,
-            action_type=action.action_type,
-            user_id=action.user_id,
-            ticket_id=action.ticket_id,
-            created_at=action.created_at,
-        )
-        for action in ModeratorActionModel.select()
+    actions = list(
+        ModeratorActionModel.select()
         .where(*where_clause)
-        .order_by(ModeratorActionModel.created_at.desc())
+        .order_by(
+            ModeratorActionModel.created_at.desc(), ModeratorActionModel.id.desc()
+        )
         .offset(offset)
         .limit(page_size)
-    ]
-    return GetModeratorActionsResponse(actions=actions, total=total)
+    )
+    # The comments of the page, in one query rather than one per action.
+    comments = {}
+    if actions:
+        comments = {
+            comment.moderator_action_id: _comment_as_response(comment)
+            for comment in TicketCommentModel.select().where(
+                TicketCommentModel.moderator_action.in_([a.id for a in actions])
+            )
+        }
+    return GetModeratorActionsResponse(
+        actions=[
+            ModeratorAction(
+                id=action.id,
+                action_type=action.action_type,
+                user_id=action.user_id,
+                ticket_id=action.ticket_id,
+                created_at=action.created_at,
+                comment=comments.get(action.id),
+            )
+            for action in actions
+        ],
+        total=total,
+    )
 
 
 @api_v1_router.get("/tickets/{ticket_id}/actions")

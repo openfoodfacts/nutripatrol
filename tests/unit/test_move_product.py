@@ -15,11 +15,11 @@ from peewee import SqliteDatabase
 from app import api as api_module
 from app.api import app
 from app.middleware.auth import ModeratorSession, moderator_session
-from app.models import FlagModel, ModeratorActionModel, TicketModel
+from app.models import FlagModel, ModeratorActionModel, TicketCommentModel, TicketModel
 from app.off_api import OFFAPIError
 
 BARCODE = "3017620422003"
-MODELS = [TicketModel, FlagModel, ModeratorActionModel]
+MODELS = [TicketModel, FlagModel, ModeratorActionModel, TicketCommentModel]
 SESSION = ModeratorSession(user_id="a-moderator", session_cookie="a-session-cookie")
 
 
@@ -94,8 +94,35 @@ def test_the_product_is_moved_and_the_ticket_closed_as_fixed(
     # Sent to the server the product is on now, which moves it on save.
     assert args[:4] == (BARCODE, {"product_type": "beauty"}, "off", "a-session-cookie")
     assert kwargs["comment"] == "a shampoo"
+    # The reason for the move is also kept on the ticket, as a comment
+    # recorded just before the close.
+    comment_action, close_action = (
+        ModeratorActionModel.select()
+        .where(ModeratorActionModel.ticket == ticket.id)
+        .order_by(ModeratorActionModel.created_at)
+    )
+    assert (comment_action.user_id, comment_action.action_type) == (
+        "a-moderator",
+        "comment",
+    )
+    assert (close_action.user_id, close_action.action_type) == (
+        "a-moderator",
+        "closed-fixed",
+    )
+    assert TicketCommentModel.get().text == "a shampoo"
+
+
+def test_a_move_without_a_comment_records_only_the_close(
+    database, moderator, off_update
+):
+    ticket = make_ticket()
+
+    response = move(ticket.id, {"flavor": "obf"})
+
+    assert response.status_code == 200, response.text
     action = ModeratorActionModel.get(ModeratorActionModel.ticket == ticket.id)
-    assert (action.user_id, action.action_type) == ("a-moderator", "closed-fixed")
+    assert action.action_type == "closed-fixed"
+    assert TicketCommentModel.select().count() == 0
 
 
 def test_a_failed_move_leaves_the_ticket_open(database, moderator, monkeypatch):
