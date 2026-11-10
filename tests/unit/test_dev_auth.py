@@ -183,6 +183,25 @@ def test_a_dev_moderator_is_let_into_a_moderator_endpoint(database, dev_users):
     assert response.status_code == 200, response.text
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "page=0",
+        "page=-1",
+        "page_size=0",
+        "page_size=-1",
+    ],
+)
+def test_moderator_actions_reject_invalid_pagination(database, dev_users, query):
+    moderator = as_user("mod", moderator=True)
+    response = request(
+        "GET",
+        f"/api/v1/moderator_actions/me?{query}",
+        headers=moderator,
+    )
+    assert response.status_code == 422, response.text
+
+
 def test_a_dev_moderator_sees_the_actions_they_recorded(database, dev_users):
     flag = post_flag("alice")
     moderator = as_user("mod", moderator=True)
