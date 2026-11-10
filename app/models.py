@@ -68,11 +68,35 @@ class TicketModel(Model):
         table_name = "tickets"
 
 
+class LabelModel(Model):
+    """A label moderators put on tickets, to sort and filter them.
+
+    Labels are shared by every ticket, so that one is renamed once for all of
+    them, and are never deleted.
+    """
+
+    name = CharField(max_length=64)
+    # The name, lowercased: unique, so that "Vandal" and "vandal" are one
+    # label.
+    name_key = CharField(max_length=64, unique=True)
+    # One of the MUI palette colors, see `LabelColor` in app/api.py.
+    color = CharField(max_length=16, null=True)
+    created_by = TextField()
+    created_at = DateTimeField()
+
+    class Meta:
+        database = db
+        table_name = "labels"
+
+
 class ModeratorActionModel(Model):
     action_type = CharField(max_length=20)
     user_id = TextField()
     ticket = ForeignKeyField(TicketModel, backref="moderator_actions")
     created_at = DateTimeField()
+    # The label added or removed, on `label_added` and `label_removed`
+    # actions.
+    label = ForeignKeyField(LabelModel, null=True, backref="moderator_actions")
 
     class Meta:
         database = db
@@ -100,6 +124,21 @@ class TicketCommentModel(Model):
     class Meta:
         database = db
         table_name = "ticket_comments"
+
+
+class TicketLabelModel(Model):
+    """A label currently on a ticket."""
+
+    ticket = ForeignKeyField(TicketModel, backref="ticket_labels")
+    label = ForeignKeyField(LabelModel, backref="ticket_labels", index=True)
+    # The moderator who put it there, and when.
+    user_id = TextField()
+    created_at = DateTimeField()
+
+    class Meta:
+        database = db
+        table_name = "ticket_labels"
+        indexes = ((("ticket", "label"), True),)
 
 
 class FlagModel(Model):
