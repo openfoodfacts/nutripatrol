@@ -10,7 +10,7 @@ import json
 
 import pytest
 import requests
-from openfoodfacts import Flavor
+from openfoodfacts import Environment, Flavor
 from openfoodfacts.utils import URLBuilder
 
 from app import off_api
@@ -226,6 +226,17 @@ def test_update_product_patches_the_v3_endpoint(off):
         "comment": "no longer sold",
     }
     assert result["product"] == {"obsolete": "on"}
+
+
+def test_update_product_uses_the_open_products_facts_hostname(off, monkeypatch):
+    monkeypatch.setattr(settings, "off_tld", Environment.org)
+    off.will_reply(json_body={"status": "success", "product": {}})
+
+    update_product("3017620422003", {"product_type": "food"}, Flavor.opf, SESSION)
+
+    assert off.call["url"] == (
+        "https://world.openproductsfacts.org/api/v3/product/3017620422003"
+    )
 
 
 def test_update_product_formats_the_v3_errors(off):
