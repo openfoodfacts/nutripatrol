@@ -225,13 +225,53 @@ async def _fetch_user_data(session_cookie: str, auth_base_url: str) -> dict:
     Kept as the full body (not just the nested "user" object) because the
     acting user's id is only available at the top level, as "user_id".
     """
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            auth_base_url, cookies={"session": session_cookie}, params={"body": "1"}
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                auth_base_url, cookies={"session": session_cookie}, params={"body": "1"}
+            )
+    except httpx.HTTPError as exc:
+        # Locally this is almost always a missing AUTH_SERVER_STATIC: the auth
+        # server is then derived from the request host, which on localhost
+        # points back at nothing.
+        reason = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+        raise _auth_server_error(
+            auth_base_url, f"could not reach it ({reason})"
+        ) from exc
 
-    if response.status_code != 200:
+    # Open Food Facts' verdict on the session itself. The delay slows down
+    # anyone guessing session tokens.
+    if response.status_code in (401, 403):
         await asyncio.sleep(2)
         raise HTTPException(status_code=401, detail="Invalid session token")
 
-    return response.json()
+    # Anything else says nothing about the session - Open Food Facts being
+    # down or rate limiting us must not log everybody out.
+    if response.status_code != 200:
+        raise _auth_server_error(
+            auth_base_url, f"it answered HTTP {response.status_code}"
+        )
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise _auth_server_error(
+            auth_base_url,
+            "it answered with something other than JSON "
+            f"({response.headers.get('content-type', 'no content type')})",
+        ) from exc
+
+
+def _auth_server_error(auth_base_url: str, problem: str) -> HTTPException:
+    """A 502 for an auth server that failed us, logged with what went wrong.
+
+    502 rather than 401 or 500: the session was never judged, and the failure
+    is upstream - the same status the Open Food Facts write calls answer with
+    (see app.off_api.OFFAPIError).
+    """
+    message = (
+        "Could not check your Open Food Facts session: the auth server at "
+        f"{auth_base_url} failed - {problem}"
+    )
+    logger.error(message)
+    return HTTPException(status_code=502, detail=message)
