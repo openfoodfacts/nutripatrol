@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/openfoodfacts/nutripatrol/compare/v1.5.0...v1.5.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **auth:** report auth server failures explicitly instead of a bare 500 ([#222](https://github.com/openfoodfacts/nutripatrol/issues/222)) ([e6a6279](https://github.com/openfoodfacts/nutripatrol/commit/e6a627940136d5d13effc46389fe455eecf08e90))
+
 ## [1.5.0](https://github.com/openfoodfacts/nutripatrol/compare/v1.4.0...v1.5.0) (2026-11-16)
 
 
