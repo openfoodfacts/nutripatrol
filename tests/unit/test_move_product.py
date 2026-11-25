@@ -15,11 +15,25 @@ from peewee import SqliteDatabase
 from app import api as api_module
 from app.api import app
 from app.middleware.auth import ModeratorSession, moderator_session
-from app.models import FlagModel, ModeratorActionModel, TicketCommentModel, TicketModel
+from app.models import (
+    FlagModel,
+    LabelModel,
+    ModeratorActionModel,
+    TicketCommentModel,
+    TicketLabelModel,
+    TicketModel,
+)
 from app.off_api import OFFAPIError
 
 BARCODE = "3017620422003"
-MODELS = [TicketModel, FlagModel, ModeratorActionModel, TicketCommentModel]
+MODELS = [
+    TicketModel,
+    FlagModel,
+    LabelModel,
+    ModeratorActionModel,
+    TicketCommentModel,
+    TicketLabelModel,
+]
 SESSION = ModeratorSession(user_id="a-moderator", session_cookie="a-session-cookie")
 
 
