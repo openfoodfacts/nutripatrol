@@ -3,3 +3,53 @@
 GitHub Actions:
 - changed-files:
   - any-glob-to-any-file: '.github/**/*'
+
+'📚 Documentation':
+- changed-files:
+  - any-glob-to-any-file:
+    - 'docs/**/*'
+    - '**/*.md'
+
+'🐳 Docker':
+- changed-files:
+  - any-glob-to-any-file:
+    - 'Dockerfile'
+    - 'docker-compose.yml'
+    - 'docker/**/*'
+
+'🐍 Python':
+- changed-files:
+  - any-glob-to-any-file:
+    - '**/*.py'
+    - 'requirements*.txt'
+    - 'pyproject.toml'
+    - '.flake8'
+
+UI:
+- changed-files:
+  - any-glob-to-any-file:
+    - 'app/templates/**/*'
+    - 'static/**/*'
+
+nginx:
+- changed-files:
+  - any-glob-to-any-file: 'nginx.conf'
+
+'👩‍💻 DevOps':
+- changed-files:
+  - any-glob-to-any-file:
+    - 'Makefile'
+    - '.pre-commit-config.yaml'
+    - '.env.example'
+    - 'Dockerfile'
+    - 'docker-compose.yml'
+    - 'docker/**/*'
+    - 'nginx.conf'
+    - '.github/**/*'
+
+dependencies:
+- changed-files:
+  - any-glob-to-any-file:
+    - 'requirements*.txt'
+    - 'pyproject.toml'
+    - '.github/dependabot.yml'
