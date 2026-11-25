@@ -253,6 +253,113 @@ def test_a_moderator_lists_every_ticket(database, act_as):
     )
 
 
+@pytest.fixture
+def tickets_by_type(database, act_as):
+    tickets = {}
+    for user_id, barcode in [("alice", BARCODE), ("bob", OTHER_BARCODE)]:
+        tickets[user_id] = {
+            "product": flag_of(act_as, user_id, barcode=barcode)["ticket_id"],
+            "image": flag_of(
+                act_as, user_id, barcode=barcode, type="image", image_id="1"
+            )["ticket_id"],
+            "search": flag_of(
+                act_as,
+                user_id,
+                barcode=None,
+                type="search",
+                url=f"https://world.openfoodfacts.org/?q={user_id}",
+            )["ticket_id"],
+        }
+    act_as("mod", moderator=1)
+    return tickets
+
+
+def test_a_moderator_filters_tickets_by_multiple_types(tickets_by_type):
+    response = request("GET", "/api/v1/tickets?type_=product&type_=image")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert {ticket["id"] for ticket in body["tickets"]} == {
+        tickets_by_type[user][type_]
+        for user in ["alice", "bob"]
+        for type_ in ["product", "image"]
+    }
+    assert body["total"] == 4
+
+
+def test_a_single_ticket_type_remains_supported(tickets_by_type):
+    response = request("GET", "/api/v1/tickets?type_=image")
+
+    assert response.status_code == 200, response.text
+    assert {ticket["id"] for ticket in response.json()["tickets"]} == {
+        tickets_by_type[user]["image"] for user in ["alice", "bob"]
+    }
+
+
+@pytest.mark.parametrize("query", ["", "?type_=product&type_=image&type_=search"])
+def test_all_ticket_types_can_be_listed(tickets_by_type, query):
+    response = request("GET", f"/api/v1/tickets{query}")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 6
+    assert len(response.json()["tickets"]) == 6
+
+
+def test_multiple_types_still_only_show_the_users_own_tickets(tickets_by_type, act_as):
+    act_as("alice")
+    response = request("GET", "/api/v1/tickets?type_=product&type_=image")
+
+    assert response.status_code == 200, response.text
+    assert {ticket["id"] for ticket in response.json()["tickets"]} == {
+        tickets_by_type["alice"]["product"],
+        tickets_by_type["alice"]["image"],
+    }
+    assert response.json()["total"] == 2
+
+
+def test_multiple_types_combine_with_other_ticket_filters(tickets_by_type, act_as):
+    ticket_id = tickets_by_type["alice"]["product"]
+    close(ticket_id, act_as)
+    response = request(
+        "GET",
+        f"/api/v1/tickets?type_=product&type_=image&barcode={BARCODE}&status=closed-fixed&reason=other",
+    )
+
+    assert response.status_code == 200, response.text
+    assert [ticket["id"] for ticket in response.json()["tickets"]] == [ticket_id]
+    assert response.json()["total"] == 1
+
+
+def test_multiple_ticket_types_share_one_paginated_result(tickets_by_type):
+    seen = []
+    for page in range(1, 5):
+        response = request(
+            "GET", f"/api/v1/tickets?type_=product&type_=image&page_size=1&page={page}"
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["total"] == 4
+        assert body["max_page"] == 4
+        assert len(body["tickets"]) == 1
+        seen.append(body["tickets"][0]["id"])
+    assert len(set(seen)) == 4
+
+
+@pytest.mark.parametrize(
+    "query", ["type_=unknown&type_=product", "type_=product&type_=unknown"]
+)
+def test_every_requested_ticket_type_is_validated(tickets_by_type, query):
+    response = request("GET", f"/api/v1/tickets?{query}")
+    assert response.status_code == 422, response.text
+
+
+def test_repeated_ticket_types_do_not_duplicate_results(tickets_by_type):
+    response = request("GET", "/api/v1/tickets?type_=product&type_=product")
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 2
+    assert len(response.json()["tickets"]) == 2
+
+
 # --- Reading what was done about it ------------------------------------------
 
 
